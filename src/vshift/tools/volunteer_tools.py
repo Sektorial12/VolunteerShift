@@ -19,6 +19,7 @@ from vshift.models.entities import (
     ShiftStatus,
     Volunteer,
 )
+from vshift.utils import metrics
 from vshift.utils.db import db
 
 logger = logging.getLogger(__name__)
@@ -95,8 +96,12 @@ def query_shifts(
     Returns:
         List of shift dictionaries matching the criteria.
     """
-    items = db.scan(config.ddb_shifts_table)
-    shifts = [Shift.from_dict(item) for item in items]
+    try:
+        items = _retry(lambda: db.scan(config.ddb_shifts_table))
+        shifts = [Shift.from_dict(item) for item in items]
+    except Exception as e:
+        logger.error("Failed to query shifts: %s", e)
+        return []
 
     result = []
     for s in shifts:
@@ -139,6 +144,118 @@ def get_volunteer(volunteer_id: str) -> dict[str, Any] | None:
     if item:
         return Volunteer.from_dict(item).to_dict()
     return None
+
+
+@tool
+def cancel_shift(shift_id: str, notify_assigned: bool = True) -> dict[str, Any]:
+    """Cancel a shift and optionally notify all assigned volunteers.
+
+    Args:
+        shift_id: The ID of the shift to cancel.
+        notify_assigned: If True, send cancellation emails to all assigned volunteers.
+
+    Returns:
+        Dictionary with cancellation status and count of notified volunteers.
+    """
+    shift_data = db.get_item(config.ddb_shifts_table, {"id": shift_id})
+    if not shift_data:
+        return {"shift_id": shift_id, "status": "shift not found"}
+
+    shift = Shift.from_dict(shift_data)
+    if shift.status == ShiftStatus.COMPLETED:
+        return {"shift_id": shift_id, "status": "cannot cancel completed shift"}
+
+    shift.status = ShiftStatus.CANCELLED
+    db.put_item(config.ddb_shifts_table, shift.to_dict())
+
+    notified = 0
+    if notify_assigned:
+        for a in shift.assigned_volunteers:
+            if a.status not in (AssignmentStatus.DECLINED, AssignmentStatus.NO_SHOW):
+                volunteer_data = db.get_item(
+                    config.ddb_volunteers_table, {"id": a.volunteer_id}
+                )
+                if volunteer_data:
+                    vol = Volunteer.from_dict(volunteer_data)
+                    send_email(
+                        to=vol.email,
+                        subject=f"Shift Cancelled: {shift.program_name}",
+                        body=f"The shift for {shift.program_name} on {shift.start_time} at {shift.location} has been cancelled. We apologize for the inconvenience.",
+                    )
+                    notified += 1
+
+    return {"shift_id": shift_id, "status": "cancelled", "notified": notified}
+
+
+@tool
+def check_duplicate_shift(
+    program_name: str,
+    start_time: str,
+    location: str,
+) -> dict[str, Any]:
+    """Check if a shift with the same program, start time, and location already exists.
+
+    Args:
+        program_name: The program name to check.
+        start_time: The start time to check (ISO format).
+        location: The location to check.
+
+    Returns:
+        Dictionary with 'is_duplicate' boolean and existing shift info if found.
+    """
+    items = db.scan(config.ddb_shifts_table)
+    shifts = [Shift.from_dict(item) for item in items]
+
+    for s in shifts:
+        if (
+            s.program_name == program_name
+            and s.start_time == start_time
+            and s.location == location
+            and s.status != ShiftStatus.CANCELLED
+        ):
+            return {"is_duplicate": True, "existing_shift_id": s.id}
+
+    return {"is_duplicate": False}
+
+
+@tool
+def remove_volunteer_from_shift(
+    shift_id: str,
+    volunteer_id: str,
+    reason: str = "",
+) -> dict[str, Any]:
+    """Remove a volunteer from a shift's assigned list.
+
+    Args:
+        shift_id: The shift ID.
+        volunteer_id: The volunteer ID to remove.
+        reason: Optional reason for removal.
+
+    Returns:
+        Dictionary with removal status.
+    """
+    shift_data = db.get_item(config.ddb_shifts_table, {"id": shift_id})
+    if not shift_data:
+        return {"shift_id": shift_id, "status": "shift not found"}
+
+    shift = Shift.from_dict(shift_data)
+
+    original_count = len(shift.assigned_volunteers)
+    shift.assigned_volunteers = [
+        a for a in shift.assigned_volunteers if a.volunteer_id != volunteer_id
+    ]
+
+    if len(shift.assigned_volunteers) == original_count:
+        return {"shift_id": shift_id, "volunteer_id": volunteer_id, "status": "volunteer not assigned"}
+
+    if shift.status == ShiftStatus.FILLED:
+        confirmed = sum(1 for a in shift.assigned_volunteers if a.status == AssignmentStatus.CONFIRMED)
+        if confirmed < shift.required_volunteers:
+            shift.status = ShiftStatus.PARTIALLY_FILLED
+
+    db.put_item(config.ddb_shifts_table, shift.to_dict())
+    logger.info("Removed volunteer %s from shift %s: %s", volunteer_id, shift_id, reason)
+    return {"shift_id": shift_id, "volunteer_id": volunteer_id, "status": "removed", "reason": reason}
 
 
 @tool
@@ -214,6 +331,7 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
     import boto3
 
     ses = boto3.client("ses", region_name=config.aws_region)
+    response = None
     try:
         response = _retry(lambda: ses.send_email(
             Source=config.ses_source_email,
@@ -223,6 +341,7 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
                 "Body": {"Text": {"Data": body}},
             },
         ))
+        metrics.communications_sent(channel="email")
         return {
             "message_id": response["MessageId"],
             "status": "sent",
@@ -251,6 +370,7 @@ def send_sms(to: str, message: str) -> dict[str, str]:
     sns = boto3.client("sns", region_name=config.aws_region)
     try:
         response = _retry(lambda: sns.publish(PhoneNumber=to, Message=message))
+        metrics.communications_sent(channel="sms")
         return {
             "message_id": response["MessageId"],
             "status": "sent",
@@ -336,6 +456,7 @@ def log_hours(
         volunteer.past_shifts.append(shift_id)
 
     db.put_item(config.ddb_volunteers_table, volunteer.to_dict())
+    metrics.hours_logged(volunteer_id=volunteer_id, hours=round(hours, 2))
 
     return {
         "volunteer_id": volunteer_id,
@@ -547,6 +668,9 @@ ALL_TOOLS = [
     get_shift,
     get_volunteer,
     match_volunteers_to_shifts,
+    cancel_shift,
+    check_duplicate_shift,
+    remove_volunteer_from_shift,
     send_email,
     send_sms,
     log_communication,

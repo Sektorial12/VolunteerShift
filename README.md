@@ -70,7 +70,7 @@ Volunteer coordinators at mid-size nonprofits ($500K-$10M budget, 50-500 volunte
 
 ```
 Scheduler Agent
-  Tools: query_volunteers, query_shifts, get_shift, get_volunteer, match_volunteers_to_shifts
+  Tools: query_volunteers, query_shifts, get_shift, get_volunteer, match_volunteers_to_shifts, check_duplicate_shift
   Role: Match volunteers to shifts by skills, availability, reliability
        |
        v
@@ -80,7 +80,7 @@ Communicator Agent
        |
        v
 Recovery Agent
-  Tools: check_shift_coverage, query_volunteers, match_volunteers_to_shifts, send_email, send_sms, log_communication, notify_coordinator
+  Tools: check_shift_coverage, query_volunteers, match_volunteers_to_shifts, send_email, send_sms, log_communication, notify_coordinator, remove_volunteer_from_shift
   Role: Detect no-shows and find replacement volunteers
        |
        v
@@ -90,9 +90,21 @@ Tracker Agent
        |
        v
 Reporter Agent
-  Tools: query_shifts, generate_report
+  Tools: query_shifts, generate_report, cancel_shift
   Role: Generate weekly/monthly coverage and impact reports
 ```
+
+### Observability
+
+Custom CloudWatch metrics are emitted under the `Vshift` namespace:
+
+| Metric | Unit | Description |
+|--------|------|-------------|
+| `shifts_coordinated` | Count | Shifts processed by Scheduler Agent |
+| `no_shows_detected` | Count | No-shows detected by Recovery Agent |
+| `no_shows_recovered` | Count | No-shows successfully recovered |
+| `hours_logged` | None | Volunteer hours logged by Tracker Agent |
+| `communications_sent` | Count | Emails/SMS sent by Communicator Agent |
 
 ### Hooks
 

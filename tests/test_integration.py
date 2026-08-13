@@ -176,6 +176,172 @@ def test_generate_report_tool():
     db.delete_item(config.ddb_reports_table, {"id": result["report_id"]})
 
 
+def test_cancel_shift_tool():
+    """Test cancel_shift tool cancels a shift in DynamoDB."""
+    from vshift.tools.volunteer_tools import cancel_shift, query_shifts
+
+    # Create a temporary test shift
+    from vshift.models.entities import Shift, ShiftStatus
+    import uuid as _uuid
+    test_id = f"test-cancel-{_uuid.uuid4()}"
+    shift = Shift(
+        id=test_id,
+        program_name="Test Cancel Program",
+        start_time="2026-09-01T10:00:00",
+        end_time="2026-09-01T14:00:00",
+        location="Test Location",
+        required_volunteers=2,
+        status=ShiftStatus.OPEN,
+    )
+    db.put_item(config.ddb_shifts_table, shift.to_dict())
+
+    # Cancel without notifications (no assigned volunteers anyway)
+    result = cancel_shift(shift_id=test_id, notify_assigned=False)
+    assert result["status"] == "cancelled"
+
+    # Verify in DynamoDB
+    cancelled = db.get_item(config.ddb_shifts_table, {"id": test_id})
+    assert cancelled["status"] == "cancelled"
+
+    # Cleanup
+    db.delete_item(config.ddb_shifts_table, {"id": test_id})
+
+
+def test_cancel_shift_nonexistent():
+    """Test cancel_shift handles nonexistent shift."""
+    from vshift.tools.volunteer_tools import cancel_shift
+
+    result = cancel_shift(shift_id="nonexistent", notify_assigned=False)
+    assert result["status"] == "shift not found"
+
+
+def test_check_duplicate_shift_tool():
+    """Test check_duplicate_shift detects existing shift."""
+    from vshift.tools.volunteer_tools import check_duplicate_shift
+
+    # s001 exists in seed data
+    shift_data = db.get_item(config.ddb_shifts_table, {"id": "s001"})
+    result = check_duplicate_shift(
+        program_name=shift_data["program_name"],
+        start_time=shift_data["start_time"],
+        location=shift_data["location"],
+    )
+    assert result["is_duplicate"] is True
+    assert result["existing_shift_id"] == "s001"
+
+
+def test_check_duplicate_shift_no_match():
+    """Test check_duplicate_shift returns False for unique shift."""
+    from vshift.tools.volunteer_tools import check_duplicate_shift
+
+    result = check_duplicate_shift(
+        program_name="Nonexistent Program",
+        start_time="2099-12-31T23:59:59",
+        location="Nowhere",
+    )
+    assert result["is_duplicate"] is False
+
+
+def test_remove_volunteer_from_shift_not_assigned():
+    """Test remove_volunteer_from_shift when volunteer is not assigned."""
+    from vshift.tools.volunteer_tools import remove_volunteer_from_shift
+
+    result = remove_volunteer_from_shift(
+        shift_id="s001",
+        volunteer_id="v999",
+        reason="test",
+    )
+    assert result["status"] == "volunteer not assigned"
+
+
+def test_remove_volunteer_from_shift_nonexistent():
+    """Test remove_volunteer_from_shift for nonexistent shift."""
+    from vshift.tools.volunteer_tools import remove_volunteer_from_shift
+
+    result = remove_volunteer_from_shift(
+        shift_id="nonexistent",
+        volunteer_id="v001",
+    )
+    assert result["status"] == "shift not found"
+
+
+def test_workflow_shift_creation_and_matching():
+    """Workflow 1: Create shift -> query -> match volunteers."""
+    from vshift.tools.volunteer_tools import (
+        check_duplicate_shift,
+        match_volunteers_to_shifts,
+        query_shifts,
+    )
+    from vshift.models.entities import Shift, ShiftStatus
+    import uuid as _uuid
+
+    # Step 1: Check no duplicate
+    dup_check = check_duplicate_shift(
+        program_name="Workflow Test Program",
+        start_time="2026-10-01T09:00:00",
+        location="Workflow Test Location",
+    )
+    assert dup_check["is_duplicate"] is False
+
+    # Step 2: Create shift
+    test_id = f"wf-{_uuid.uuid4()}"
+    shift = Shift(
+        id=test_id,
+        program_name="Workflow Test Program",
+        start_time="2026-10-01T09:00:00",
+        end_time="2026-10-01T13:00:00",
+        location="Workflow Test Location",
+        required_skills=["food_handling"],
+        required_volunteers=3,
+        status=ShiftStatus.OPEN,
+    )
+    db.put_item(config.ddb_shifts_table, shift.to_dict())
+
+    # Step 3: Query shifts -- should find our new shift
+    shifts = query_shifts(status="open")
+    assert any(s["id"] == test_id for s in shifts)
+
+    # Step 4: Match volunteers
+    matches = match_volunteers_to_shifts(shift_id=test_id)
+    assert len(matches) > 0
+    assert all("score" in v for v in matches)
+
+    # Cleanup
+    db.delete_item(config.ddb_shifts_table, {"id": test_id})
+
+
+def test_workflow_hour_tracking_and_reporting():
+    """Workflow 4: Log hours -> update profile -> generate report."""
+    from vshift.tools.volunteer_tools import log_hours, generate_report
+    from datetime import datetime, timedelta
+
+    # Log hours for v001
+    check_in = datetime.now() - timedelta(hours=4)
+    check_out = datetime.now()
+    result = log_hours(
+        volunteer_id="v001",
+        shift_id="s001",
+        checked_in_at=check_in.isoformat(),
+        checked_out_at=check_out.isoformat(),
+    )
+    assert result["status"] == "logged"
+    assert result["hours_logged"] > 3.9  # ~4 hours
+
+    # Verify volunteer profile updated
+    vol = db.get_item(config.ddb_volunteers_table, {"id": "v001"})
+    assert float(vol["total_hours"]) > 0
+
+    # Generate report
+    now = datetime.now()
+    start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    end = now.strftime("%Y-%m-%d")
+    report = generate_report(period="weekly", start_date=start, end_date=end)
+    assert report["report_id"] is not None
+
+    # Cleanup report
+    db.delete_item(config.ddb_reports_table, {"id": report["report_id"]})
+
+
 @pytest.mark.skipif(
     not os.getenv("AWS_BEARER_TOKEN_BEDROCK"),
     reason="AWS_BEARER_TOKEN_BEDROCK not set",
