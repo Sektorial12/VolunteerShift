@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from strands import Agent
 
+from vshift.agents.model import create_model
 from vshift.agents.prompts import COMMUNICATOR_SYSTEM_PROMPT
 from vshift.tools.volunteer_tools import (
     log_communication,
@@ -15,6 +16,7 @@ def create_communicator_agent() -> Agent:
     """Create the Communicator Agent that sends personalized communications."""
     return Agent(
         system_prompt=COMMUNICATOR_SYSTEM_PROMPT,
+        model=create_model(),
         tools=[
             send_email,
             send_sms,

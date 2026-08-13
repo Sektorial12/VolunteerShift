@@ -4,10 +4,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Config:
-    aws_region: str = os.getenv("AWS_REGION", "us-west-2")
+    aws_region: str = os.getenv("AWS_REGION", "us-east-1")
     bedrock_model_id: str = os.getenv(
-        "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
+        "BEDROCK_MODEL_ID", "mistral.mistral-large-3-675b-instruct"
     )
+    bedrock_bearer_token: str = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
 
     ddb_volunteers_table: str = os.getenv("DDB_VOLUNTEERS_TABLE", "vshift-volunteers")
     ddb_shifts_table: str = os.getenv("DDB_SHIFTS_TABLE", "vshift-shifts")

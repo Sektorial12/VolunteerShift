@@ -2,8 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Any
+
+
+def _to_dynamodb(value: Any) -> Any:
+    """Convert float values to Decimal for DynamoDB compatibility."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _to_dynamodb(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_dynamodb(v) for v in value]
+    return value
 
 
 class VolunteerStatus(str, Enum):
@@ -68,7 +80,7 @@ class Volunteer:
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        return _to_dynamodb({
             "id": self.id,
             "name": self.name,
             "email": self.email,
@@ -81,7 +93,7 @@ class Volunteer:
             "status": self.status.value,
             "preferred_channels": self.preferred_channels,
             "notes": self.notes,
-        }
+        })
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Volunteer:
@@ -92,8 +104,8 @@ class Volunteer:
             phone=data.get("phone", ""),
             skills=data.get("skills", []),
             availability=data.get("availability", {}),
-            reliability_score=data.get("reliability_score", 0.8),
-            total_hours=data.get("total_hours", 0.0),
+            reliability_score=float(data.get("reliability_score", 0.8)),
+            total_hours=float(data.get("total_hours", 0.0)),
             past_shifts=data.get("past_shifts", []),
             status=VolunteerStatus(data.get("status", "active")),
             preferred_channels=data.get("preferred_channels", ["email"]),
@@ -142,7 +154,7 @@ class Shift:
     status: ShiftStatus = ShiftStatus.OPEN
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        return _to_dynamodb({
             "id": self.id,
             "program_name": self.program_name,
             "start_time": self.start_time,
@@ -152,7 +164,7 @@ class Shift:
             "required_volunteers": self.required_volunteers,
             "assigned_volunteers": [a.to_dict() for a in self.assigned_volunteers],
             "status": self.status.value,
-        }
+        })
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Shift:
@@ -225,7 +237,7 @@ class Report:
     generated_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        return _to_dynamodb({
             "id": self.id,
             "period": self.period.value,
             "start_date": self.start_date,
@@ -236,7 +248,7 @@ class Report:
             "no_show_rate": self.no_show_rate,
             "coverage_rate": self.coverage_rate,
             "generated_at": self.generated_at,
-        }
+        })
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Report:
@@ -245,10 +257,10 @@ class Report:
             period=ReportPeriod(data.get("period", "weekly")),
             start_date=data["start_date"],
             end_date=data["end_date"],
-            total_shifts=data.get("total_shifts", 0),
-            total_volunteers=data.get("total_volunteers", 0),
-            total_hours=data.get("total_hours", 0.0),
-            no_show_rate=data.get("no_show_rate", 0.0),
-            coverage_rate=data.get("coverage_rate", 0.0),
+            total_shifts=int(data.get("total_shifts", 0)),
+            total_volunteers=int(data.get("total_volunteers", 0)),
+            total_hours=float(data.get("total_hours", 0.0)),
+            no_show_rate=float(data.get("no_show_rate", 0.0)),
+            coverage_rate=float(data.get("coverage_rate", 0.0)),
             generated_at=data.get("generated_at", ""),
         )
