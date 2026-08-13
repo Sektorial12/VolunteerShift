@@ -14,11 +14,14 @@ from vshift.agents.tracker import create_tracker_agent
 logger = logging.getLogger(__name__)
 
 
-def create_vshift_graph() -> tuple:
+def create_vshift_graph(with_hooks: bool = False) -> tuple:
     """Create the multi-agent Graph for VolunteerShift.
 
     Graph topology:
         scheduler -> communicator -> recovery -> tracker -> reporter
+
+    Args:
+        with_hooks: If True, register audit hooks on all agents.
 
     Returns:
         Tuple of (graph, agents_dict) where agents_dict maps names to Agent instances.
@@ -28,6 +31,13 @@ def create_vshift_graph() -> tuple:
     recovery = create_recovery_agent()
     tracker = create_tracker_agent()
     reporter = create_reporter_agent()
+
+    if with_hooks:
+        from vshift.agents.hooks import register_hooks
+
+        for agent in [scheduler, communicator, recovery, tracker, reporter]:
+            register_hooks(agent)
+        logger.info("Audit hooks registered on all agents")
 
     agents = {
         "scheduler": scheduler,
