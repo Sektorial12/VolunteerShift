@@ -33,3 +33,7 @@ htmlcov/
 
 # Strands
 strands.log*
+
+# Dashboard
+dashboard/node_modules/
+dashboard/.next/
