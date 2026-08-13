@@ -21,52 +21,182 @@ Volunteer coordinators at mid-size nonprofits ($500K-$10M budget, 50-500 volunte
 ## Architecture
 
 ```
-EventBridge (trigger)
-  |
-  v
-AgentCore Runtime (Strands multi-agent Graph)
-  |
-  +-- Scheduler Agent -----> query_volunteers, query_shifts, match_volunteers_to_shifts
-  +-- Communicator Agent --> send_email (SES), send_sms (SNS), log_communication
-  +-- Recovery Agent ------> query_volunteers, send_email, send_sms, notify_coordinator
-  +-- Tracker Agent -------> log_hours, update_volunteer_profile, check_shift_coverage
-  +-- Reporter Agent ------> generate_report
-  |
-  v
-DynamoDB (volunteers, shifts, communications, reports, audit)
-S3 (reports, audit logs, sessions)
-CloudWatch (observability)
+                    +-------------------+
+                    |   Web Dashboard   |
+                    |  (Next.js/React)  |
+                    +--------+----------+
+                             |
+                             v
+                    +--------+----------+
+                    |   FastAPI Server  |
+                    |  (api.py)         |
+                    +--------+----------+
+                             |
+                             v
+          +------------------+------------------+
+          |     Multi-Agent Graph (Strands)     |
+          |                                      |
+          |  Scheduler -> Communicator ->        |
+          |  Recovery -> Tracker -> Reporter     |
+          |                                      |
+          |  Each agent has dedicated tools,     |
+          |  system prompts, and audit hooks     |
+          +------------------+------------------+
+                             |
+          +------------------+------------------+
+          |                                      |
+          v                                      v
+  +-------+------+                       +-------+-------+
+  |  DynamoDB    |                       |  AWS SES      |
+  |  (5 tables)  |                       |  (Email)      |
+  +--------------+                       +---------------+
+          |                                      |
+          v                                      v
+  +-------+------+                       +-------+-------+
+  |  Amazon S3   |                       |  AWS SNS      |
+  |  (Reports,   |                       |  (SMS)        |
+  |   Sessions)  |                       +---------------+
+  +--------------+
+          |
+          v
+  +-------+------+
+  |  Bedrock     |
+  |  (Mistral    |
+  |   Large 3)   |
+  +--------------+
 ```
+
+### Agent Graph
+
+```
+Scheduler Agent
+  Tools: query_volunteers, query_shifts, get_shift, get_volunteer, match_volunteers_to_shifts
+  Role: Match volunteers to shifts by skills, availability, reliability
+       |
+       v
+Communicator Agent
+  Tools: send_email, send_sms, log_communication, notify_coordinator
+  Role: Send personalized invitations and reminders (3-touch sequence)
+       |
+       v
+Recovery Agent
+  Tools: check_shift_coverage, query_volunteers, match_volunteers_to_shifts, send_email, send_sms, log_communication, notify_coordinator
+  Role: Detect no-shows and find replacement volunteers
+       |
+       v
+Tracker Agent
+  Tools: check_shift_coverage, get_shift, log_hours, update_volunteer_profile
+  Role: Log volunteer hours and update reliability scores
+       |
+       v
+Reporter Agent
+  Tools: query_shifts, generate_report
+  Role: Generate weekly/monthly coverage and impact reports
+```
+
+### Hooks
+
+- **BeforeToolCallEvent**: Validates recipients for communication tools (blocks invalid emails/phone numbers)
+- **AfterToolCallEvent**: Logs all tool calls to DynamoDB audit table with timestamp, tool name, input, and result
+
+### Session Management
+
+- **S3SessionManager**: Production session persistence across agent invocations
+- **FileSessionManager**: Local development session persistence
 
 ## Prerequisites
 
 - Python 3.10+
-- AWS account with Bedrock access (Claude Sonnet 4)
+- AWS account with Bedrock access
 - AWS CLI configured with credentials
-- DynamoDB, S3, SES, SNS permissions
+- IAM permissions for: Bedrock, DynamoDB, S3, SES, SNS
+- Node.js 20+ (for dashboard)
 
 ## Setup
 
+### 1. Clone and install backend
+
 ```bash
-# Clone and install
 git clone <repo-url>
 cd vshift
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -e .
+```
 
-# Configure environment
+### 2. Configure environment
+
+```bash
 cp .env.example .env
-# Edit .env with your AWS credentials and resource names
+# Edit .env with your values:
+# - AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# - AWS_BEARER_TOKEN_BEDROCK (Bedrock API key from console)
+# - BEDROCK_MODEL_ID (default: mistral.mistral-large-3-675b-instruct)
+# - SES_SOURCE_EMAIL (must be verified in SES sandbox)
+# - SNS_TOPIC_ARN (create SNS topic for SMS)
+```
 
-# Create DynamoDB tables and load seed data
-python -m vshift.utils.seed_data
+### 3. Create DynamoDB tables and load seed data
+
+```bash
+PYTHONPATH=src python3 -m vshift.utils.seed_data
+```
+
+This creates 5 DynamoDB tables and loads 50 volunteer profiles + 5 shifts.
+
+### 4. Set up the dashboard
+
+```bash
+cd dashboard
+npm install
+# Create .env.local with NEXT_PUBLIC_API_URL=http://localhost:8000
+cd ..
 ```
 
 ## Run Locally
 
+### Start the API server
+
 ```bash
-uvicorn src.vshift.api:app --reload --port 8000
+source .venv/bin/activate
+export $(grep -v '^#' .env | xargs)
+PYTHONPATH=src uvicorn vshift.api:app --reload --port 8000
+```
+
+### Start the dashboard
+
+```bash
+cd dashboard
+npm run dev
+```
+
+Open http://localhost:3000 to view the dashboard.
+
+### Trigger agent actions
+
+Via the dashboard, or via API:
+
+```bash
+# Schedule volunteers for a shift
+curl -X POST http://localhost:8000/api/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"action": "schedule", "shift_id": "s001"}'
+
+# Send reminders
+curl -X POST http://localhost:8000/api/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"action": "remind", "shift_id": "s001"}'
+
+# Check for no-shows
+curl -X POST http://localhost:8000/api/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"action": "noshow_check", "shift_id": "s001"}'
+
+# Generate weekly report
+curl -X POST http://localhost:8000/api/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"action": "report"}'
 ```
 
 ## Deploy to AgentCore
@@ -77,12 +207,51 @@ agentcore create --name vshift --framework Strands --protocol HTTP --model-provi
 agentcore deploy
 ```
 
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/dashboard` | Dashboard state (active shifts, recent communications) |
+| POST | `/api/shifts` | Create a new shift |
+| GET | `/api/shifts` | List all shifts |
+| GET | `/api/shifts/{id}` | Get shift details |
+| POST | `/api/shifts/{id}/checkin` | Volunteer check-in |
+| POST | `/api/shifts/{id}/checkout` | Volunteer check-out |
+| GET | `/api/volunteers` | List all volunteers |
+| GET | `/api/volunteers/{id}` | Get volunteer details |
+| POST | `/api/volunteers/respond` | Volunteer confirm/decline invitation |
+| GET | `/api/communications` | List all communications |
+| GET | `/api/reports` | List all reports |
+| GET | `/api/reports/{id}` | Get report details |
+| POST | `/api/trigger` | Trigger agent action (schedule, remind, noshow_check, track, report) |
+| GET | `/api/ping` | Health check |
+
 ## Run Tests
 
+### Unit tests (no AWS required)
+
 ```bash
-pytest
+source .venv/bin/activate
+PYTHONPATH=src pytest tests/test_models.py tests/test_agents.py -v
 ```
 
-## License
+### Integration tests (requires AWS)
 
-MIT
+```bash
+source .venv/bin/activate
+export $(grep -v '^#' .env | xargs)
+PYTHONPATH=src pytest tests/test_integration.py -v
+```
+
+## Tech Stack
+
+- **Agent Framework**: Strands Agents SDK (Python) v1.52.0
+- **LLM**: Mistral Large 3 675B via Amazon Bedrock (Mantle API)
+- **Backend**: FastAPI, Python 3.12
+- **Frontend**: Next.js 15, React 19, Tailwind CSS, Lucide icons
+- **Database**: Amazon DynamoDB (5 tables)
+- **Storage**: Amazon S3 (reports, audit logs, sessions)
+- **Email**: Amazon SES
+- **SMS**: Amazon SNS
+- **Deployment**: Amazon Bedrock AgentCore Runtime
+- **License**: MIT

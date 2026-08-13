@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from botocore.exceptions import ClientError
 from strands import tool
 
 from vshift.config import config
@@ -17,6 +20,25 @@ from vshift.models.entities import (
     Volunteer,
 )
 from vshift.utils.db import db
+
+logger = logging.getLogger(__name__)
+
+
+def _retry(fn, max_retries: int = 3, backoff_base: float = 1.0):
+    """Retry a function with exponential backoff on transient errors."""
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in ("ThrottlingException", "ProvisionedThroughputExceededException", "RequestLimitExceeded"):
+                if attempt < max_retries - 1:
+                    wait = backoff_base * (2 ** attempt)
+                    logger.warning("Retrying after %ss (attempt %d/%d): %s", wait, attempt + 1, max_retries, error_code)
+                    time.sleep(wait)
+                    continue
+            raise
+    return None
 
 
 @tool
@@ -37,8 +59,12 @@ def query_volunteers(
     Returns:
         List of volunteer dictionaries matching the criteria.
     """
-    items = db.scan(config.ddb_volunteers_table)
-    volunteers = [Volunteer.from_dict(item) for item in items]
+    try:
+        items = _retry(lambda: db.scan(config.ddb_volunteers_table))
+        volunteers = [Volunteer.from_dict(item) for item in items]
+    except Exception as e:
+        logger.error("Failed to query volunteers: %s", e)
+        return []
 
     result = []
     for v in volunteers:
@@ -189,19 +215,20 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
 
     ses = boto3.client("ses", region_name=config.aws_region)
     try:
-        response = ses.send_email(
+        response = _retry(lambda: ses.send_email(
             Source=config.ses_source_email,
             Destination={"ToAddresses": [to]},
             Message={
                 "Subject": {"Data": subject},
                 "Body": {"Text": {"Data": body}},
             },
-        )
+        ))
         return {
             "message_id": response["MessageId"],
             "status": "sent",
         }
     except Exception as e:
+        logger.error("Failed to send email to %s: %s", to, e)
         return {
             "message_id": "",
             "status": f"failed: {e}",
@@ -223,12 +250,13 @@ def send_sms(to: str, message: str) -> dict[str, str]:
 
     sns = boto3.client("sns", region_name=config.aws_region)
     try:
-        response = sns.publish(PhoneNumber=to, Message=message)
+        response = _retry(lambda: sns.publish(PhoneNumber=to, Message=message))
         return {
             "message_id": response["MessageId"],
             "status": "sent",
         }
     except Exception as e:
+        logger.error("Failed to send SMS to %s: %s", to, e)
         return {
             "message_id": "",
             "status": f"failed: {e}",
