@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from vshift.config import config
@@ -20,6 +21,14 @@ app = FastAPI(
     title="VolunteerShift API",
     description="Autonomous volunteer coordination agent",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -199,6 +208,20 @@ async def volunteer_respond(req: VolunteerResponse) -> dict[str, Any]:
     raise HTTPException(status_code=404, detail="Volunteer not assigned to this shift")
 
 
+def _wire(agent, required_tools: list[str], resume_prompt: str) -> None:
+    """Register audit hooks + reliability (auto-resume) hooks on an agent."""
+    from vshift.agents.hooks import register_hooks
+    from vshift.agents.reliability import register_reliability_hooks
+
+    register_hooks(agent)
+    register_reliability_hooks(
+        agent,
+        required_tools=required_tools,
+        resume_prompt=resume_prompt,
+        max_resumes=2,
+    )
+
+
 @app.post("/api/trigger")
 async def trigger_agent(req: TriggerRequest) -> dict[str, Any]:
     """Manually trigger a specific agent action on real data."""
@@ -210,31 +233,41 @@ async def trigger_agent(req: TriggerRequest) -> dict[str, Any]:
 
     if req.action == "schedule" and req.shift_id:
         agent = create_scheduler_agent()
-        result = agent(f"Find and match volunteers for shift {req.shift_id}. Use the tools to query the shift and find matching volunteers.")
+        _wire(agent, ["assign_volunteers_to_shift"],
+              f"Query shift {req.shift_id}, find matching volunteers, and call assign_volunteers_to_shift to assign the top candidates. You MUST actually call the assign_volunteers_to_shift tool.")
+        result = agent(f"Find, match, and assign volunteers for shift {req.shift_id}. Query the shift, find matching volunteers, rank them, and use assign_volunteers_to_shift to assign the top candidates.")
         return {"action": "schedule", "result": str(result)}
 
     elif req.action == "remind" and req.shift_id:
         agent = create_communicator_agent()
+        _wire(agent, ["log_communication"],
+              f"Send 48-hour reminders to all confirmed volunteers for shift {req.shift_id} using send_email/send_sms, and call log_communication for each. You MUST call the tools.")
         result = agent(f"Send 48-hour reminders to all confirmed volunteers for shift {req.shift_id}.")
         return {"action": "remind", "result": str(result)}
 
     elif req.action == "noshow_check" and req.shift_id:
         agent = create_recovery_agent()
+        _wire(agent, ["check_shift_coverage"],
+              f"Call check_shift_coverage for shift {req.shift_id} to detect no-shows, and act on the results. You MUST call the check_shift_coverage tool.")
         result = agent(f"Check shift {req.shift_id} for no-shows and find replacements if needed.")
         return {"action": "noshow_check", "result": str(result)}
 
     elif req.action == "track" and req.shift_id:
         agent = create_tracker_agent()
-        result = agent(f"Track hours and update profiles for completed shift {req.shift_id}.")
+        _wire(agent, ["log_hours"],
+              f"Call check_shift_coverage for shift {req.shift_id}, then for each volunteer who checked in and out call log_hours and update_volunteer_profile. You MUST actually call log_hours.")
+        result = agent(f"Track hours and update profiles for completed shift {req.shift_id}. Call check_shift_coverage, then for each volunteer who checked in and out call log_hours and update_volunteer_profile. You MUST actually call these tools, not just describe them.")
         return {"action": "track", "result": str(result)}
 
     elif req.action == "report":
-        agent = create_reporter_agent()
         from datetime import timedelta
+        agent = create_reporter_agent()
+        _wire(agent, ["generate_report"],
+              "You MUST call the generate_report tool to create and store the report. Call it now with the exact dates provided.")
         now = datetime.now(timezone.utc)
         start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-        end = now.strftime("%Y-%m-%d")
-        result = agent(f"Generate a weekly report from {start} to {end}.")
+        end = (now + timedelta(days=14)).strftime("%Y-%m-%d")
+        result = agent(f"Generate a weekly report. The exact start_date is {start} and the exact end_date is {end}. Call the generate_report tool with period='weekly', start_date='{start}', end_date='{end}'. You MUST call generate_report with these exact dates to create and store the report.")
         return {"action": "report", "result": str(result)}
 
     else:

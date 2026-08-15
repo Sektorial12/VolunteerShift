@@ -5,6 +5,7 @@ from strands import Agent
 from vshift.agents.model import create_model
 from vshift.agents.prompts import SCHEDULER_SYSTEM_PROMPT
 from vshift.tools.volunteer_tools import (
+    assign_volunteers_to_shift,
     get_shift,
     get_volunteer,
     match_volunteers_to_shifts,
@@ -19,6 +20,7 @@ def create_scheduler_agent() -> Agent:
         system_prompt=SCHEDULER_SYSTEM_PROMPT,
         model=create_model(),
         tools=[
+            assign_volunteers_to_shift,
             query_volunteers,
             query_shifts,
             get_shift,

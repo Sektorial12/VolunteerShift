@@ -67,17 +67,22 @@ const messageTypeIcons: Record<string, string> = {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreateShift, setShowCreateShift] = useState(false);
   const [triggering, setTriggering] = useState<string | null>(null);
   const [triggerResult, setTriggerResult] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
+      setError(null);
       const res = await fetch(`${API_BASE}/api/dashboard`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("Failed to fetch dashboard:", err);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -109,8 +114,26 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <RefreshCw className="w-8 h-8 animate-spin text-brand-600" />
+        <p className="text-sm text-gray-500">Loading dashboard from {API_BASE}...</p>
+        {error && <p className="text-sm text-red-600">Error: {error}</p>}
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <AlertCircle className="w-8 h-8 text-red-500" />
+        <p className="text-sm text-red-600">Failed to load: {error}</p>
+        <p className="text-xs text-gray-400">API: {API_BASE}</p>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm"
+        >
+          Retry
+        </button>
       </div>
     );
   }

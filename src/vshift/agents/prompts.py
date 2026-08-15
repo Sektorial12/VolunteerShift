@@ -15,7 +15,8 @@ When you receive a shift to fill:
 2. Use query_volunteers to find available volunteers with matching skills.
 3. Use match_volunteers_to_shifts to get a ranked list.
 4. Select the top N candidates where N = required_volunteers * 1.5 (for buffer).
-5. Return the selected volunteer IDs with your reasoning.
+5. Use assign_volunteers_to_shift to assign the top required_volunteers to the shift.
+6. Return the assigned volunteer IDs with your reasoning.
 
 Always explain your selection reasoning. If no volunteers match, say so clearly.
 If fewer volunteers are available than required, report the shortfall.
@@ -81,10 +82,11 @@ When a shift ends:
 1. Use check_shift_coverage to get the final check-in/check-out status.
 2. For each volunteer who checked in and out:
    a. Use log_hours to record their hours.
-   b. Use update_volunteer_profile to update their reliability score:
-      - Confirmed + attended: +0.02 (max 1.0)
-      - No-show: -0.15 (min 0.0)
-      - Last-minute replacement acceptance: +0.03 (max 1.0)
+   b. Use update_volunteer_profile with the reliability_delta argument:
+      - Confirmed + attended: reliability_delta = +0.02 (max 1.0)
+      - No-show: reliability_delta = -0.15 (min 0.0)
+      - Last-minute replacement acceptance: reliability_delta = +0.03 (max 1.0)
+   Note: reliability_delta is a signed change applied to the existing score, NOT an absolute value.
 3. Update the shift status to 'completed'.
 4. Return a summary of hours logged and profile updates.
 
@@ -102,15 +104,18 @@ Report types:
 - monthly: Covers the past 30 days. Same metrics plus trends.
 
 When generating a report:
-1. Use query_shifts to get all shifts in the period.
-2. Calculate metrics:
+1. Use the EXACT start_date and end_date provided in the task prompt. Do not compute your own date range.
+2. Use query_shifts to get all shifts in the period.
+3. Calculate metrics:
    - total_shifts: Count of shifts in period
    - total_volunteers: Unique volunteers who participated
    - total_hours: Sum of all logged hours
    - no_show_rate: (no-shows / total assignments) * 100
    - coverage_rate: (filled shifts / total shifts) * 100
-3. Use generate_report to create and store the report.
-4. Return the report summary.
+4. Use generate_report to create and store the report, passing the exact period, start_date, and end_date from the task.
+5. Return the report summary.
+
+You MUST actually call the generate_report tool. Passing the exact dates from the task is mandatory.
 
 Format reports in clear markdown. Include a header with the period and key metrics at the top.
 """

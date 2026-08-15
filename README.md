@@ -120,8 +120,8 @@ Custom CloudWatch metrics are emitted under the `Vshift` namespace:
 
 - Python 3.10+
 - AWS account with Bedrock access
-- AWS CLI configured with credentials
-- IAM permissions for: Bedrock, DynamoDB, S3, SES, SNS
+- AWS CLI configured with credentials (`aws configure`)
+- IAM permissions for: Bedrock, DynamoDB, S3, SES, SNS, CloudWatch
 - Node.js 20+ (for dashboard)
 
 ## Setup
@@ -146,23 +146,61 @@ cp .env.example .env
 # - AWS_BEARER_TOKEN_BEDROCK (Bedrock API key from console)
 # - BEDROCK_MODEL_ID (default: mistral.mistral-large-3-675b-instruct)
 # - SES_SOURCE_EMAIL (must be verified in SES sandbox)
-# - SNS_TOPIC_ARN (create SNS topic for SMS)
+# - SNS_TOPIC_ARN (from step 2b below)
 ```
 
-### 3. Create DynamoDB tables and load seed data
+### 2a. Verify SES email addresses (sandbox mode)
+
+SES sandbox requires both sender and recipient emails to be verified:
 
 ```bash
+# Verify the source email (sender)
+aws ses verify-email-identity --email-address coordinator@vshift.example.org
+
+# Verify each volunteer email you want to send to (for demo, use emails you control)
+aws ses verify-email-identity --email-address your-email@example.com
+
+# Check verification status
+aws ses get-identity-verification-attributes --identities coordinator@vshift.example.org
+```
+
+### 2b. Create SNS topic for SMS
+
+```bash
+# Create the topic
+aws sns create-topic --name vshift-sms
+
+# Copy the TopicArn from the output and set it in .env as SNS_TOPIC_ARN
+# Note: SNS SMS requires phone numbers in E.164 format (e.g., +15551234567)
+```
+
+### 3. Create S3 buckets
+
+The app uses 3 S3 buckets for reports, audit logs, and session state:
+
+```bash
+aws s3 mb s3://vshift-reports
+aws s3 mb s3://vshift-audit
+aws s3 mb s3://vshift-sessions
+```
+
+### 4. Create DynamoDB tables and load seed data
+
+```bash
+source .venv/bin/activate
+export $(grep -v '^#' .env | xargs)
 PYTHONPATH=src python3 -m vshift.utils.seed_data
 ```
 
-This creates 5 DynamoDB tables and loads 50 volunteer profiles + 5 shifts.
+This creates 5 DynamoDB tables (volunteers, shifts, communications, reports, audit) and loads 50 volunteer profiles + 5 shifts.
 
-### 4. Set up the dashboard
+### 5. Set up the dashboard
 
 ```bash
 cd dashboard
 npm install
-# Create .env.local with NEXT_PUBLIC_API_URL=http://localhost:8000
+# Create .env.local with the API URL:
+echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > .env.local
 cd ..
 ```
 

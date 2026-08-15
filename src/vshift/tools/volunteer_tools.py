@@ -469,6 +469,7 @@ def log_hours(
 def update_volunteer_profile(
     volunteer_id: str,
     reliability_score: float | None = None,
+    reliability_delta: float | None = None,
     notes: str | None = None,
     status: str | None = None,
 ) -> dict[str, str]:
@@ -476,12 +477,14 @@ def update_volunteer_profile(
 
     Args:
         volunteer_id: The volunteer's ID.
-        reliability_score: New reliability score (0.0-1.0), if updating.
+        reliability_score: New absolute reliability score (0.0-1.0), if setting explicitly.
+        reliability_delta: Signed change to apply to the current reliability score
+            (e.g. +0.02 for attending, -0.15 for no-show). Clamped to [0.0, 1.0].
         notes: New notes string, if updating.
         status: New status (active, pending, inactive), if updating.
 
     Returns:
-        Dictionary with 'volunteer_id' and 'status'.
+        Dictionary with 'volunteer_id', 'status', and the resulting 'reliability_score'.
     """
     volunteer_data = db.get_item(config.ddb_volunteers_table, {"id": volunteer_id})
     if not volunteer_data:
@@ -491,13 +494,21 @@ def update_volunteer_profile(
 
     if reliability_score is not None:
         volunteer.reliability_score = max(0.0, min(1.0, reliability_score))
+    elif reliability_delta is not None:
+        volunteer.reliability_score = max(
+            0.0, min(1.0, volunteer.reliability_score + reliability_delta)
+        )
     if notes is not None:
         volunteer.notes = notes
     if status is not None:
         volunteer.status = type(volunteer.status)(status)
 
     db.put_item(config.ddb_volunteers_table, volunteer.to_dict())
-    return {"volunteer_id": volunteer_id, "status": "updated"}
+    return {
+        "volunteer_id": volunteer_id,
+        "status": "updated",
+        "reliability_score": round(volunteer.reliability_score, 2),
+    }
 
 
 @tool
@@ -600,11 +611,17 @@ def generate_report(
 
     start_dt = datetime.fromisoformat(start_date)
     end_dt = datetime.fromisoformat(end_date)
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=timezone.utc)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=timezone.utc)
 
     period_shifts = []
     for s in all_shifts:
         try:
             shift_start = datetime.fromisoformat(s.start_time)
+            if shift_start.tzinfo is None:
+                shift_start = shift_start.replace(tzinfo=timezone.utc)
             if start_dt <= shift_start <= end_dt:
                 period_shifts.append(s)
         except (ValueError, TypeError):
@@ -651,6 +668,8 @@ def generate_report(
 
     db.put_item(config.ddb_reports_table, report.to_dict())
 
+    s3_status = _store_report_in_s3(report_id, report.to_dict())
+
     return {
         "report_id": report_id,
         "period": period,
@@ -659,6 +678,84 @@ def generate_report(
         "no_show_rate": round(no_show_rate, 1),
         "coverage_rate": round(coverage_rate, 1),
         "generated_at": now,
+        "s3_status": s3_status,
+    }
+
+
+def _store_report_in_s3(report_id: str, report_data: dict[str, Any]) -> str:
+    """Persist a generated report to the S3 reports bucket as a JSON artifact."""
+    import json
+
+    import boto3
+
+    from botocore.exceptions import ClientError as S3ClientError
+
+    s3 = boto3.client("s3", region_name=config.aws_region)
+    key = f"reports/{report_id}.json"
+    try:
+        _retry(lambda: s3.put_object(
+            Bucket=config.s3_reports_bucket,
+            Key=key,
+            Body=json.dumps(report_data, default=str).encode("utf-8"),
+            ContentType="application/json",
+        ))
+        return "stored"
+    except S3ClientError as e:
+        logger.error("Failed to store report %s in S3: %s", report_id, e)
+        return f"failed: {e}"
+
+
+@tool
+def assign_volunteers_to_shift(
+    shift_id: str,
+    volunteer_ids: list[str],
+) -> dict[str, Any]:
+    """Assign volunteers to a shift by updating the shift's assigned list and status.
+
+    Creates INVITED assignments for each volunteer. Updates shift status to
+    partially_filled or filled based on how many are assigned.
+
+    Args:
+        shift_id: The shift ID to assign volunteers to.
+        volunteer_ids: List of volunteer IDs to assign.
+
+    Returns:
+        Dictionary with shift_id, assigned count, and new status.
+    """
+    shift_data = db.get_item(config.ddb_shifts_table, {"id": shift_id})
+    if not shift_data:
+        return {"shift_id": shift_id, "status": "shift not found"}
+
+    shift = Shift.from_dict(shift_data)
+
+    existing_ids = {a.volunteer_id for a in shift.assigned_volunteers}
+    new_assignments = []
+    for vid in volunteer_ids:
+        if vid not in existing_ids:
+            new_assignments.append(Assignment(volunteer_id=vid, status=AssignmentStatus.INVITED))
+
+    if not new_assignments:
+        return {"shift_id": shift_id, "assigned": 0, "status": "all already assigned"}
+
+    shift.assigned_volunteers.extend(new_assignments)
+
+    total_assigned = len(shift.assigned_volunteers)
+    if total_assigned >= shift.required_volunteers:
+        shift.status = ShiftStatus.FILLED
+    else:
+        shift.status = ShiftStatus.PARTIALLY_FILLED
+
+    db.put_item(config.ddb_shifts_table, shift.to_dict())
+    logger.info(
+        "Assigned %d volunteer(s) to shift %s (now %d/%d)",
+        len(new_assignments), shift_id, total_assigned, shift.required_volunteers,
+    )
+    return {
+        "shift_id": shift_id,
+        "assigned": len(new_assignments),
+        "total_assigned": total_assigned,
+        "required": shift.required_volunteers,
+        "status": shift.status.value,
     }
 
 
@@ -668,6 +765,7 @@ ALL_TOOLS = [
     get_shift,
     get_volunteer,
     match_volunteers_to_shifts,
+    assign_volunteers_to_shift,
     cancel_shift,
     check_duplicate_shift,
     remove_volunteer_from_shift,
