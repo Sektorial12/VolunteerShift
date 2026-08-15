@@ -81,6 +81,33 @@ curl -s -X POST https://<deployment-endpoint>/invocations \
 Attach `infra/iam/vshift-role-policy.json` to the runtime role (least privilege).
 Run `infra/scripts/bootstrap.sh` to create S3 buckets, SNS topic, and EventBridge rules.
 
+For the AgentCore/CDK deploy itself, create + attach the managed policy
+`infra/iam/agentcore-deploy-policy.json` (CloudFormation, ECR, ECS, Lambda,
+CodeBuild, KMS, SSM, S3, service-quotas). Note:
+
+- This policy exceeds the 2048-byte **inline** policy cap, so it must be a
+  **managed policy** (`aws iam create-policy` + `attach-user-policy`).
+- After updating the policy JSON, run `aws iam create-policy-version` and
+  **`aws iam set-default-policy-version`** — otherwise CDK sees the stale version.
+
+## Step 7: AgentCore account quotas (required before first deploy)
+
+AgentCore/CDK deployment on a brand-new AWS account commonly fails at two
+account-level **service quotas** (not IAM):
+
+1. **AWS CodeBuild — "Concurrently running builds for Linux Lambda/2GB" = 0**
+   → use `--build CodeZip` for the agent to avoid CodeBuild entirely (verified working),
+   or submit a Service Quotas increase.
+2. **Amazon Bedrock AgentCore — "Total Agents per Account" = 0** and
+   "Endpoints per Agent" / "Versions per Agent" = 0.
+   → Request an increase: `aws service-quotas request-service-quota-increase \
+     --service-code bedrock-agentcore --quota-code L-F4575653 --desired-value 1001`
+   (auto-approves; verify with `aws service-quotas get-service-quota ...`).
+
+Do not attempt CodeZip/CodeBuild or the AgentCore deploy until quota #2 shows a
+non-zero value, or the CFN stack fails with
+"maxAgents limit exceeded for account".
+
 ## Notes
 
 - The AgentCore entry (`agentcore_entry.py`) binds port **8080** (not 8000) — map

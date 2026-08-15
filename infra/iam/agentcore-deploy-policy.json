@@ -1,0 +1,116 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormationFullAccess",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECRFullAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECSPerimeter",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:*",
+        "elasticloadbalancing:*",
+        "servicediscovery:*",
+        "ec2:Describe*",
+        "route53:ListHostedZones",
+        "route53:GetHostedZone",
+        "route53:ChangeResourceRecordSets",
+        "route53:ListResourceRecordSets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LambdaFullAccess",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": [
+        "codebuild:*",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:CreateBucket"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SsmForCdkBootstrap",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "KmsForCdkBootstrap",
+      "Effect": "Allow",
+      "Action": [
+        "kms:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "StsAssumeForDeploy",
+      "Effect": "Allow",
+      "Action": [
+        "sts:AssumeRole",
+        "iam:PassRole",
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3DeployArtifacts",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::cdk-*"
+    },
+    {
+      "Sid": "ServiceQuotasRead",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
