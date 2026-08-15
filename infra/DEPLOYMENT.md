@@ -59,7 +59,7 @@ The deployment must set these (from `.env.example`):
 | `AWS_BEARER_TOKEN_BEDROCK` | `true` (use Mantle API) |
 | `BEDROCK_MODEL_ID` | `mistral.mistral-large-3-675b-instruct` |
 | `DDB_*_TABLE` | `vshift-{volunteers,shifts,communications,reports,audit}` |
-| `S3_*_BUCKET` | `vshift-{reports,audit,sessions}` |
+| `S3_*_BUCKET` | `vshift-{reports,sessions}` (audit logs live in the DynamoDB `vshift-audit` table) |
 | `SES_SOURCE_EMAIL` | verified SES identity |
 | `SNS_TOPIC_ARN` | vshift-sms topic ARN |
 | `AUTOMATION_ENABLED` | `true` |

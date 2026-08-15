@@ -70,7 +70,7 @@ Volunteer coordinators at mid-size nonprofits ($500K-$10M budget, 50-500 volunte
 
 ```
 Scheduler Agent
-  Tools: query_volunteers, query_shifts, get_shift, get_volunteer, match_volunteers_to_shifts, check_duplicate_shift
+  Tools: query_volunteers, query_shifts, get_shift, get_volunteer, match_volunteers_to_shifts, assign_volunteers_to_shift
   Role: Match volunteers to shifts by skills, availability, reliability
        |
        v
@@ -80,7 +80,7 @@ Communicator Agent
        |
        v
 Recovery Agent
-  Tools: check_shift_coverage, query_volunteers, match_volunteers_to_shifts, send_email, send_sms, log_communication, notify_coordinator, remove_volunteer_from_shift
+  Tools: check_shift_coverage, query_volunteers, match_volunteers_to_shifts, get_shift, send_email, send_sms, log_communication, notify_coordinator
   Role: Detect no-shows and find replacement volunteers
        |
        v
@@ -90,7 +90,7 @@ Tracker Agent
        |
        v
 Reporter Agent
-  Tools: query_shifts, generate_report, cancel_shift
+  Tools: query_shifts, generate_report
   Role: Generate weekly/monthly coverage and impact reports
 ```
 
@@ -176,11 +176,10 @@ aws sns create-topic --name vshift-sms
 
 ### 3. Create S3 buckets
 
-The app uses 3 S3 buckets for reports, audit logs, and session state:
+The app uses 2 S3 buckets for reports and session state (audit logs are stored in the DynamoDB `vshift-audit` table, not S3):
 
 ```bash
 aws s3 mb s3://vshift-reports
-aws s3 mb s3://vshift-audit
 aws s3 mb s3://vshift-sessions
 ```
 
@@ -271,6 +270,7 @@ agentcore deploy
 | GET | `/api/volunteers/{id}` | Get volunteer details |
 | POST | `/api/volunteers/respond` | Volunteer confirm/decline invitation |
 | GET | `/api/communications` | List all communications |
+| GET | `/api/audit` | Agent audit trail (tool call history, newest first) |
 | GET | `/api/reports` | List all reports |
 | GET | `/api/reports/{id}` | Get report details |
 | POST | `/api/trigger` | Trigger agent action (schedule, remind, noshow_check, track, report) |
@@ -305,7 +305,7 @@ PYTHONPATH=src pytest tests/test_integration.py -v
 - **Backend**: FastAPI, Python 3.12
 - **Frontend**: Next.js 15, React 19, Tailwind CSS, Lucide icons
 - **Database**: Amazon DynamoDB (5 tables)
-- **Storage**: Amazon S3 (reports, audit logs, sessions)
+- **Storage**: Amazon S3 (reports, session state)
 - **Email**: Amazon SES
 - **SMS**: Amazon SNS
 - **Deployment**: Amazon Bedrock AgentCore Runtime
