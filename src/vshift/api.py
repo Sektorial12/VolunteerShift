@@ -75,6 +75,31 @@ class TriggerRequest(BaseModel):
     shift_id: str | None = None
 
 
+class IngestShiftRequest(BaseModel):
+    program_name: str
+    start_time: str
+    end_time: str
+    location: str
+    required_skills: list[str] = []
+    required_volunteers: int = 1
+
+
+class IngestVolunteerRequest(BaseModel):
+    name: str
+    email: str
+    phone: str = ""
+    skills: list[str] = []
+    availability: dict[str, list[str]] = {}
+    preferred_channels: list[str] = []
+
+
+class EmailReplyRequest(BaseModel):
+    subject: str = ""
+    body: str = ""
+    volunteer_email: str = ""
+    shift_id: str = ""
+
+
 @app.get("/api/dashboard")
 async def get_dashboard() -> dict[str, Any]:
     shifts = db.scan(config.ddb_shifts_table)
@@ -232,6 +257,81 @@ def _wire(agent, required_tools: list[str], resume_prompt: str) -> None:
     from vshift.agents._wiring import wire_agent
 
     wire_agent(agent, required_tools, resume_prompt)
+
+
+@app.post("/api/ingest/shift")
+async def ingest_shift_endpoint(req: IngestShiftRequest) -> dict[str, Any]:
+    """Ingest a shift from an external system."""
+    from vshift.ingestion import ingest_shift
+
+    try:
+        result = ingest_shift(req.model_dump())
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/ingest/volunteer")
+async def ingest_volunteer_endpoint(req: IngestVolunteerRequest) -> dict[str, Any]:
+    """Ingest a volunteer from an external system (upserts by email)."""
+    from vshift.ingestion import ingest_volunteer
+
+    try:
+        result = ingest_volunteer(req.model_dump())
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/ingest/email-reply")
+async def ingest_email_reply(req: EmailReplyRequest) -> dict[str, Any]:
+    """Ingest a volunteer email reply and apply it to their assignment.
+
+    This is the integration point for SES inbound email handling. A Lambda /
+    SES rule calls this endpoint with the parsed subject/body + volunteer email.
+    """
+    from vshift.ingestion import find_volunteer_by_email, parse_volunteer_email_reply
+    from vshift.models.entities import AssignmentStatus
+
+    response = parse_volunteer_email_reply(req.subject, req.body)
+    if response is None:
+        return {"status": "unrecognized", "detail": "Could not classify email as confirm/decline"}
+
+    volunteer = find_volunteer_by_email(req.volunteer_email) if req.volunteer_email else None
+    if not volunteer:
+        return {"status": "error", "detail": "Volunteer email not found"}
+
+    shift_data = db.get_item(config.ddb_shifts_table, {"id": req.shift_id})
+    if not shift_data:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    shift = Shift.from_dict(shift_data)
+    now = datetime.now(timezone.utc).isoformat()
+
+    for a in shift.assigned_volunteers:
+        if a.volunteer_id == volunteer.id:
+            if response == "confirm":
+                a.status = AssignmentStatus.CONFIRMED
+                a.confirmed_at = now
+            else:
+                a.status = AssignmentStatus.DECLINED
+
+            confirmed = sum(1 for x in shift.assigned_volunteers if x.status == AssignmentStatus.CONFIRMED)
+            if confirmed >= shift.required_volunteers:
+                shift.status = ShiftStatus.FILLED
+            elif confirmed > 0:
+                shift.status = ShiftStatus.PARTIALLY_FILLED
+
+            db.put_item(config.ddb_shifts_table, shift.to_dict())
+            return {
+                "status": "applied",
+                "volunteer_id": volunteer.id,
+                "shift_id": req.shift_id,
+                "response": response,
+                "shift_status": shift.status.value,
+            }
+
+    return {"status": "error", "detail": "Volunteer not assigned to this shift"}
 
 
 @app.post("/api/trigger")

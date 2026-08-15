@@ -274,6 +274,11 @@ agentcore deploy
 | GET | `/api/reports` | List all reports |
 | GET | `/api/reports/{id}` | Get report details |
 | POST | `/api/trigger` | Trigger agent action (schedule, remind, noshow_check, track, report) |
+| POST | `/api/ingest/shift` | Ingest a shift from an external system (dedupes) |
+| POST | `/api/ingest/volunteer` | Ingest a volunteer (upserts by email) |
+| POST | `/api/ingest/email-reply` | Apply a volunteer email reply (confirm/decline) |
+| POST | `/api/automation/run` | Run the automation cycle manually |
+| GET | `/api/automation/status` | Automation worker status |
 | GET | `/api/ping` | Health check |
 
 ## Run Tests
