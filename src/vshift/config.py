@@ -34,5 +34,11 @@ class Config:
 
     noshow_threshold_minutes: int = int(os.getenv("NOSHOW_THRESHOLD_MINUTES", "2"))
 
+    automation_enabled: bool = os.getenv("AUTOMATION_ENABLED", "true").lower() == "true"
+    scheduler_interval_seconds: int = int(
+        os.getenv("SCHEDULER_INTERVAL_SECONDS", "30")
+    )
+    time_acceleration: float = float(os.getenv("TIME_ACCELERATION", "1.0"))
+
 
 config = Config()

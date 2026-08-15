@@ -20,7 +20,7 @@ from vshift.utils.db import db
 app = FastAPI(
     title="VolunteerShift API",
     description="Autonomous volunteer coordination agent",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -30,6 +30,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def _start_automation() -> None:
+    from vshift.automation import AutomationWorker
+
+    global _automation_worker
+    _automation_worker = AutomationWorker()
+    if config.automation_enabled:
+        _automation_worker.start()
+
+
+@app.on_event("shutdown")
+async def _stop_automation() -> None:
+    if _automation_worker is not None:
+        _automation_worker.stop()
+
+
+_automation_worker = None
 
 
 class ShiftCreate(BaseModel):
@@ -210,16 +229,9 @@ async def volunteer_respond(req: VolunteerResponse) -> dict[str, Any]:
 
 def _wire(agent, required_tools: list[str], resume_prompt: str) -> None:
     """Register audit hooks + reliability (auto-resume) hooks on an agent."""
-    from vshift.agents.hooks import register_hooks
-    from vshift.agents.reliability import register_reliability_hooks
+    from vshift.agents._wiring import wire_agent
 
-    register_hooks(agent)
-    register_reliability_hooks(
-        agent,
-        required_tools=required_tools,
-        resume_prompt=resume_prompt,
-        max_resumes=2,
-    )
+    wire_agent(agent, required_tools, resume_prompt)
 
 
 @app.post("/api/trigger")
@@ -277,3 +289,24 @@ async def trigger_agent(req: TriggerRequest) -> dict[str, Any]:
 @app.get("/api/ping")
 async def ping() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/automation/run")
+async def automation_run() -> dict[str, Any]:
+    """Manually run the automation cycle (for testing/control)."""
+    from vshift.automation import run_due_cycle
+
+    results = run_due_cycle()
+    return {"ran": len(results), "results": results}
+
+
+@app.get("/api/automation/status")
+async def automation_status() -> dict[str, Any]:
+    """Return automation worker status."""
+    return {
+        "enabled": config.automation_enabled,
+        "worker_running": _automation_worker is not None and _automation_worker._thread is not None and _automation_worker._thread.is_alive(),
+        "interval_seconds": config.scheduler_interval_seconds,
+        "time_acceleration": config.time_acceleration,
+        "clock": __import__("vshift.automation", fromlist=["clock"]).clock().isoformat(),
+    }
