@@ -215,6 +215,8 @@ def run_due_cycle(now: datetime | None = None) -> list[dict[str, Any]]:
                 executed.append(result)
             except Exception as e:  # noqa: BLE001
                 logger.exception("Automation action %s for shift %s failed: %s", action, shift.id, e)
+                from vshift.utils.metrics import agent_action_failed
+                agent_action_failed(action=action)
                 executed.append({"action": action, "shift_id": shift.id, "error": str(e)})
 
     return executed

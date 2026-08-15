@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 
 app = BedrockAgentCoreApp(debug=True)
 
+
+def _setup() -> None:
+    from vshift.utils.telemetry import setup_telemetry
+
+    setup_telemetry()
+
+
+_setup()
+
 graph, agents = create_vshift_graph(with_hooks=True)
 
 

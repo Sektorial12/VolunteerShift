@@ -40,5 +40,8 @@ class Config:
     )
     time_acceleration: float = float(os.getenv("TIME_ACCELERATION", "1.0"))
 
+    telemetry_enabled: bool = os.getenv("TELEMETRY_ENABLED", "false").lower() == "true"
+    otlp_endpoint: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
 
 config = Config()

@@ -18,7 +18,8 @@ def audit_before_tool_call(event: BeforeToolCallEvent) -> None:
     """Hook: validate tool calls before execution.
 
     - For communication tools (send_email, send_sms), validate the recipient
-      exists in the volunteer database before allowing the call.
+      exists / is well-formed before allowing the call.
+    - Guard: block obvious PII patterns from being sent in communication bodies.
     """
     tool_name = event.tool_use.get("name", "")
     tool_input = event.tool_use.get("input", {})
@@ -34,6 +35,17 @@ def audit_before_tool_call(event: BeforeToolCallEvent) -> None:
             logger.warning("Blocked send_email: invalid email %s", recipient)
             event.cancel_tool = True
             return
+
+    # PII guard: never emit SSNs, credit cards, or passwords in any tool input.
+    import re
+
+    joined = f"{tool_name} {json.dumps(tool_input, default=str)}"
+    ssn = re.search(r"\b\d{3}-\d{2}-\d{4}\b", joined)
+    cc = re.search(r"\b(?:\d[ -]*?){13,19}\b", joined)
+    if ssn or (cc and any(re.search(r"\b\d{4} \d{4} \d{4} \d{4}\b", joined))):
+        logger.warning("Blocked %s: suspected PII in tool input", tool_name)
+        event.cancel_tool = True
+        return
 
     logger.debug("Approved tool call: %s", tool_name)
 

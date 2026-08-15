@@ -1,0 +1,104 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          ["Vshift", "shifts_coordinated", { "stat": "Sum" }]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Shifts Coordinated",
+        "period": 300
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 0,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          ["Vshift", "communications_sent", { "stat": "Sum" }]
+        ],
+        "view": "timeSeries",
+        "stacked": true,
+        "region": "us-east-1",
+        "title": "Communications Sent",
+        "stat": "Sum",
+        "period": 300
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 0,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          ["Vshift", "hours_logged", { "stat": "Sum" }]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Hours Logged",
+        "stat": "Sum",
+        "period": 300
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          ["Vshift", "no_shows_detected", { "stat": "Sum" }],
+          ["Vshift", "no_shows_recovered", { "stat": "Sum" }]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "No-Shows: Detected vs Recovered",
+        "stat": "Sum",
+        "period": 300
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          ["Vshift", "hours_logged", { "stat": "Sum" }]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Error Rate (placeholder for telemetry metric)",
+        "stat": "Sum",
+        "period": 300
+      }
+    },
+    {
+      "type": "text",
+      "x": 16,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "markdown": "## Vshift Agent Metrics\n\n- **shifts_coordinated** — shifts assigned volunteers\n- **communications_sent** (dim: Channel) — messages sent\n- **hours_logged** — volunteer hours tracked\n- **no_shows_detected / no_shows_recovered** — recovery funnel\n\nAlerts: agent error rate >5%, tool latency >10s, no-show recovery failure."
+      }
+    }
+  ]
+}

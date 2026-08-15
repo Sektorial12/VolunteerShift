@@ -35,6 +35,9 @@ app.add_middleware(
 @app.on_event("startup")
 async def _start_automation() -> None:
     from vshift.automation import AutomationWorker
+    from vshift.utils.telemetry import setup_telemetry
+
+    setup_telemetry()
 
     global _automation_worker
     _automation_worker = AutomationWorker()

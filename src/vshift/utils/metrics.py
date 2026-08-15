@@ -66,3 +66,12 @@ def hours_logged(volunteer_id: str = "", hours: float = 0.0) -> None:
 
 def communications_sent(channel: str = "email", count: int = 1) -> None:
     _emit("communications_sent", value=float(count), dimensions=[{"Name": "Channel", "Value": channel}])
+
+
+def agent_action_failed(action: str = "") -> None:
+    """Record a failed agent action (e.g. exception during automation)."""
+    _emit(
+        "agent_action_failed",
+        value=1.0,
+        dimensions=[{"Name": "Action", "Value": action}] if action else None,
+    )
