@@ -1,0 +1,155 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockInvokeModelSpecific",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/mistral.mistral-large-3-675b-instruct"
+    },
+    {
+      "Sid": "DynamoDBShiftsTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-shifts",
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-shifts/index/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDBVolunteersTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-volunteers",
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-volunteers/index/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDBCommunicationsTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-communications",
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-communications/index/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDBReportsTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-reports",
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-reports/index/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDBAuditTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-audit",
+        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vshift-audit/index/*"
+      ]
+    },
+    {
+      "Sid": "S3ReportsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::vshift-reports",
+        "arn:aws:s3:::vshift-reports/*"
+      ]
+    },
+    {
+      "Sid": "S3SessionsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::vshift-sessions",
+        "arn:aws:s3:::vshift-sessions/*"
+      ]
+    },
+    {
+      "Sid": "S3AuditBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::vshift-audit",
+        "arn:aws:s3:::vshift-audit/*"
+      ]
+    },
+    {
+      "Sid": "SESSendEmail",
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SNS Publish",
+      "Effect": "Allow",
+      "Action": [
+        "sns:Publish"
+      ],
+      "Resource": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:vshift-sms"
+    },
+    {
+      "Sid": "CloudWatchMetrics",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
