@@ -205,6 +205,14 @@ async def list_communications() -> list[dict[str, Any]]:
     return db.scan(config.ddb_communications_table)
 
 
+@app.get("/api/audit")
+async def list_audit(sort: str = "desc") -> list[dict[str, Any]]:
+    """Return the agent audit trail (tool call history), newest first."""
+    items = db.scan(config.ddb_audit_table)
+    items.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
+    return items[:200]
+
+
 @app.get("/api/reports")
 async def list_reports() -> list[dict[str, Any]]:
     return db.scan(config.ddb_reports_table)

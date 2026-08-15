@@ -1,12 +1,26 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle, XCircle, Loader2, Calendar, MapPin } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function RespondPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <Loader2 className="animate-spin text-gray-400" />
+        </div>
+      }
+    >
+      <RespondPageInner />
+    </Suspense>
+  );
+}
+
+function RespondPageInner() {
   const searchParams = useSearchParams();
   const volunteerId = searchParams.get("volunteer_id") || "";
   const shiftId = searchParams.get("shift_id") || "";

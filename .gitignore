@@ -37,3 +37,4 @@ strands.log*
 # Dashboard
 dashboard/node_modules/
 dashboard/.next/
+dashboard/tsconfig.tsbuildinfo
