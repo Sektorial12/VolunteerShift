@@ -111,6 +111,17 @@
         "servicequotas:*"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "BedrockAgentCoreControl",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:*",
+        "bedrock:InvokeAgentCoreRuntime",
+        "bedrock:CreateAgentCoreRuntime",
+        "bedrock:GetAgentCoreRuntime"
+      ],
+      "Resource": "*"
     }
   ]
 }
