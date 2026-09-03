@@ -7,6 +7,12 @@ compatible with Amazon Bedrock AgentCore Runtime requirements.
 from __future__ import annotations
 
 import logging
+import os
+import sys
+
+# Make the src/ layout importable regardless of how the runtime executes this
+# entrypoint (AgentCore CodeZip runs from the artifact root, not with PYTHONPATH set).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
