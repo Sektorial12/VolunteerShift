@@ -48,14 +48,14 @@ export default function VolunteerDetailPage() {
         <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
           <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-gray-400" /> {volunteer.email}</p>
           <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> {volunteer.phone || "—"}</p>
-          <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {(volunteer.total_hours || 0).toFixed(1)} hours logged</p>
+          <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {Number(volunteer.total_hours || 0).toFixed(1)} hours logged</p>
         </div>
 
         <div className="mt-5 flex items-center gap-3">
           <span className={`text-xs px-3 py-1 rounded-full font-medium ${
             volunteer.reliability_score >= 0.8 ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
           }`}>
-            {(volunteer.reliability_score * 100).toFixed(0)}% reliable
+            {(Number(volunteer.reliability_score || 0) * 100).toFixed(0)}% reliable
           </span>
           <span className={`text-xs px-3 py-1 rounded-full font-medium ${
             volunteer.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"

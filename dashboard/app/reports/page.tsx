@@ -90,7 +90,7 @@ export default function ReportsPage() {
                 <p className="text-xs text-gray-500">Volunteers</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-lg font-bold text-gray-900">{(r.total_hours || 0).toFixed(1)}</p>
+                <p className="text-lg font-bold text-gray-900">{Number(r.total_hours || 0).toFixed(1)}</p>
                 <p className="text-xs text-gray-500">Hours</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-2">

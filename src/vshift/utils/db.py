@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from typing import Any
 
 import boto3
@@ -8,6 +9,22 @@ from botocore.exceptions import ClientError
 from vshift.config import config
 
 logger = logging.getLogger(__name__)
+
+
+def _from_dynamodb(value: Any) -> Any:
+    """Convert DynamoDB Decimals back to plain JSON types on read.
+
+    Whole numbers become int, fractional become float. Recurses into
+    dicts and lists so API responses never leak Decimal (which FastAPI
+    would serialize as a string, breaking numeric consumers).
+    """
+    if isinstance(value, Decimal):
+        return int(value) if value == int(value) else float(value)
+    if isinstance(value, dict):
+        return {k: _from_dynamodb(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_from_dynamodb(v) for v in value]
+    return value
 
 
 class DynamoDBClient:
@@ -27,7 +44,8 @@ class DynamoDBClient:
         table = self.get_table(table_name)
         try:
             response = table.get_item(Key=key)
-            return response.get("Item")
+            item = response.get("Item")
+            return _from_dynamodb(item) if item is not None else None
         except ClientError as e:
             logger.error("Error getting item from %s: %s", table_name, e)
             return None
@@ -40,12 +58,12 @@ class DynamoDBClient:
         if index_name:
             kwargs["IndexName"] = index_name
         response = table.query(**kwargs)
-        return response.get("Items", [])
+        return _from_dynamodb(response.get("Items", []))
 
     def scan(self, table_name: str) -> list[dict[str, Any]]:
         table = self.get_table(table_name)
         response = table.scan()
-        return response.get("Items", [])
+        return _from_dynamodb(response.get("Items", []))
 
     def update_item(
         self,
@@ -66,7 +84,8 @@ class DynamoDBClient:
             kwargs["ExpressionAttributeNames"] = expression_names
         try:
             response = table.update_item(**kwargs)
-            return response.get("Attributes")
+            attrs = response.get("Attributes")
+            return _from_dynamodb(attrs) if attrs is not None else None
         except ClientError as e:
             logger.error("Error updating item in %s: %s", table_name, e)
             return None

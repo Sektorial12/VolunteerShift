@@ -74,7 +74,7 @@ export default function VolunteersPage() {
             <div className="flex items-center justify-between text-xs text-gray-500">
               <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {v.total_hours} hrs</span>
               <span className={`px-2 py-0.5 rounded-full ${v.reliability_score >= 0.8 ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                {(v.reliability_score * 100).toFixed(0)}% reliable
+                {(Number(v.reliability_score || 0) * 100).toFixed(0)}% reliable
               </span>
             </div>
             {v.skills.length > 0 && (
