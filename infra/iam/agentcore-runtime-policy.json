@@ -1,0 +1,85 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MantleInference",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-mantle:CreateInference",
+        "bedrock-mantle:CallWithBearerToken"
+      ],
+      "Resource": [
+        "arn:aws:bedrock-mantle:us-east-1:946877383418:project/default",
+        "*"
+      ]
+    },
+    {
+      "Sid": "BedrockModels",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/mistral.mistral-large-3-675b-instruct"
+    },
+    {
+      "Sid": "DynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:946877383418:table/vshift-volunteers",
+        "arn:aws:dynamodb:us-east-1:946877383418:table/vshift-shifts",
+        "arn:aws:dynamodb:us-east-1:946877383418:table/vshift-communications",
+        "arn:aws:dynamodb:us-east-1:946877383418:table/vshift-reports",
+        "arn:aws:dynamodb:us-east-1:946877383418:table/vshift-audit"
+      ]
+    },
+    {
+      "Sid": "S3",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::vshift-reports",
+        "arn:aws:s3:::vshift-sessions",
+        "arn:aws:s3:::vshift-reports/*",
+        "arn:aws:s3:::vshift-sessions/*"
+      ]
+    },
+    {
+      "Sid": "SES",
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SNS",
+      "Effect": "Allow",
+      "Action": [
+        "sns:Publish"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:946877383418:vshift-sms"
+    },
+    {
+      "Sid": "CloudWatchMetrics",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
