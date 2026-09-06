@@ -1,24 +1,33 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import SideNav from "../components/SideNav";
+import { ToastProvider } from "@/components/ui/toast";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "VolunteerShift Dashboard",
-  description: "Autonomous volunteer coordination agent",
+  title: {
+    default: "VolunteerShift",
+    template: "%s · VolunteerShift",
+  },
+  description:
+    "An autonomous coordination agent that schedules volunteers, sends reminders, recovers no-shows and tracks hours, so coordinators get their week back.",
+  applicationName: "VolunteerShift",
+  icons: { icon: "/icon.svg" },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const viewport: Viewport = {
+  themeColor: "#059669",
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <div className="flex min-h-screen bg-gray-50">
-          <SideNav />
-          <main className="flex-1 p-6 max-w-7xl overflow-x-hidden">{children}</main>
-        </div>
+    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
+      <body className="min-h-screen">
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );
