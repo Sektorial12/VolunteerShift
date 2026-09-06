@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Activity, ChevronDown, ChevronRight, Pause, Play, RefreshCw, Search } from "lucide-react";
 import { api, type AuditEntry } from "@/lib/api";
 import { usePolling, useNow, useDebounced } from "@/lib/hooks";
-import { auditResultText, auditStatus, fmtDate, fmtRelative, fmtTime, toolMeta, tryParseJson } from "@/lib/format";
+import { auditResultText, auditStatus, fmtDate, fmtRelative, fmtTime, humanize, toolMeta, tryParseJson } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -237,7 +237,7 @@ function summarize(tool: string, input: Record<string, unknown> | null): string 
     case "send_sms":
       return typeof input.message === "string" ? truncate(input.message as string, 80) : "SMS";
     case "log_communication":
-      return `${String(input.message_type ?? "message").replace(/_/g, " ")} via ${String(input.channel ?? "")}`;
+      return `${humanize(String(input.message_type ?? "message"))} via ${String(input.channel ?? "")}`;
     case "assign_volunteers_to_shift": {
       const ids = Array.isArray(input.volunteer_ids) ? (input.volunteer_ids as unknown[]).length : undefined;
       return ids !== undefined ? `Assigned ${ids} volunteer${ids === 1 ? "" : "s"}` : "Assigned volunteers";

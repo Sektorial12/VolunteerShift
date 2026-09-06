@@ -367,7 +367,15 @@ function useCountUp(target: number, duration = 900): number {
       else from.current = target;
     };
     raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    // Safety net: if animation frames are throttled (background tab, headless), land on the final value anyway.
+    const settle = setTimeout(() => {
+      setValue(target);
+      from.current = target;
+    }, duration + 100);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(settle);
+    };
   }, [target, duration]);
   return value;
 }

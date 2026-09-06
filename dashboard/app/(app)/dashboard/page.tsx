@@ -170,7 +170,7 @@ export default function DashboardPage() {
                         {shift.program_name}
                       </Link>
                       <p className="truncate text-xs text-slate-500">
-                        {reason} · starts {fmtRelative(shift.start_time, now)}
+                        {reason} · {shiftPhase(shift, now) === "live" ? "started" : "starts"} {fmtRelative(shift.start_time, now)}
                       </p>
                     </div>
                     <Link
