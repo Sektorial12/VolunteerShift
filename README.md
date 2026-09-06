@@ -198,10 +198,20 @@ This creates 5 DynamoDB tables (volunteers, shifts, communications, reports, aud
 ```bash
 cd dashboard
 npm install
-# Create .env.local with the API URL:
-echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > .env.local
+cp .env.example .env.local     # API_URL=http://localhost:8000 by default
 cd ..
 ```
+
+The dashboard never calls the backend from the browser directly. Every request goes
+to the dashboard origin under `/api/...` and a route handler
+(`dashboard/app/api/[...path]/route.ts`) forwards it to `API_URL` at request time.
+That means:
+
+- no CORS entry is needed for the dashboard origin,
+- an HTTPS-hosted dashboard can talk to the plain-HTTP VPS, and
+- `API_URL` is runtime config: change it on the host and restart, no rebuild.
+
+`NEXT_PUBLIC_API_URL` from the original setup is still honoured as the proxy target.
 
 ## Run Locally
 
@@ -217,10 +227,28 @@ PYTHONPATH=src uvicorn vshift.api:app --reload --port 8000
 
 ```bash
 cd dashboard
-npm run dev
+npm run dev          # http://localhost:3000
+npm run build        # must pass before shipping
+API_URL=http://51.170.132.143:8000 npm start   # production build against the VPS
 ```
 
-Open http://localhost:3000 to view the dashboard.
+Routes:
+
+| Path | What it is |
+|------|------------|
+| `/` | Public landing page with a live agent console |
+| `/respond?volunteer_id=..&shift_id=..` | Public one-tap confirm / decline page for volunteers (no admin chrome) |
+| `/dashboard` | Coordinator overview: needs-a-decision list, confirmed-seat coverage, live tool calls |
+| `/shifts`, `/shifts/[id]` | Shift list with filters; detail with roster, check-in/out, agent triggers, respond links |
+| `/volunteers`, `/volunteers/[id]` | Pool with skill filters; profile with history, availability, messages |
+| `/communications` | Every message the agents sent, by channel and type |
+| `/activity` | Audit trail of every tool call with parsed input and result |
+| `/reports`, `/reports/[id]` | Reporter output with trends |
+| `/automation` | Worker status, countdown, rules, manual cycle |
+
+Coverage everywhere is counted from **confirmed** assignments over required seats, not
+from the shift `status` field, so a shift the backend marks `filled` still shows `0/5`
+until volunteers actually confirm.
 
 ### Trigger agent actions
 
