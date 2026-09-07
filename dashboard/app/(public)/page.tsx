@@ -91,34 +91,54 @@ export default function LandingPage() {
 
   const online = !dash.error && !!dash.data;
 
+  // The header floats transparently over the dark hero, then solidifies once the
+  // page scrolls so it stays readable over the light sections below.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <div className="min-h-screen bg-white text-slate-900">
       {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur">
+      <header
+        className={cx(
+          "fixed inset-x-0 top-0 z-50 transition-colors duration-300",
+          scrolled ? "border-b border-white/10 bg-slate-950/85 backdrop-blur" : "bg-transparent",
+        )}
+      >
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
+          <Link href="/" className="flex items-center gap-2.5 text-white">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm ring-1 ring-white/10">
               <Sparkles className="h-4 w-4" />
             </span>
             <span className="text-sm font-semibold tracking-tight">VolunteerShift</span>
           </Link>
-          <nav className="hidden items-center gap-7 text-sm text-slate-600 md:flex">
-            <a href="#how" className="hover:text-slate-900">
+          <nav className="hidden items-center gap-7 text-sm text-slate-300 md:flex">
+            <a href="#how" className="transition hover:text-white">
               How it works
             </a>
-            <a href="#agents" className="hover:text-slate-900">
+            <a href="#agents" className="transition hover:text-white">
               The agents
             </a>
-            <a href="#live" className="hover:text-slate-900">
+            <a href="#live" className="transition hover:text-white">
               Live
             </a>
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-slate-900">
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 transition hover:text-white"
+            >
               <Github className="h-4 w-4" /> Source
             </a>
           </nav>
           <Link
             href="/dashboard"
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-900 px-3.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-white/10 px-3.5 text-sm font-medium text-white ring-1 ring-inset ring-white/20 backdrop-blur transition hover:bg-white/20"
           >
             Open dashboard <ArrowRight className="h-4 w-4" />
           </Link>
@@ -131,7 +151,7 @@ export default function LandingPage() {
           <div className="absolute -top-40 left-1/2 h-[560px] w-[900px] -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl" />
           <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
         </div>
-        <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-20 pt-20 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:pb-28 lg:pt-28">
+        <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-20 pt-28 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:pb-28 lg:pt-36">
           <div className="animate-fade-up">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
               <span className={cx("h-1.5 w-1.5 rounded-full", online ? "bg-brand-400 animate-pulse-dot" : "bg-slate-500")} />
@@ -189,7 +209,7 @@ export default function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+      <section id="how" className="mx-auto max-w-6xl scroll-mt-16 px-4 py-20 sm:px-6">
         <div className="max-w-2xl">
           <p className="text-sm font-semibold text-brand-600">How it works</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight">Create the shift. Everything after that is automatic.</h2>
@@ -219,7 +239,7 @@ export default function LandingPage() {
       </section>
 
       {/* Agents */}
-      <section id="agents" className="border-y border-slate-200 bg-slate-50">
+      <section id="agents" className="scroll-mt-16 border-y border-slate-200 bg-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
           <div className="max-w-2xl">
             <p className="text-sm font-semibold text-brand-600">The agents</p>
@@ -314,7 +334,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section id="live" className="border-t border-slate-200 bg-slate-950 text-white">
+      <section id="live" className="scroll-mt-16 border-t border-slate-200 bg-slate-950 text-white">
         <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
           <h2 className="text-3xl font-semibold tracking-tight">Watch it run on live data.</h2>
           <p className="mx-auto mt-3 max-w-xl text-slate-300">
