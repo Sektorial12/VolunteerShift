@@ -121,6 +121,9 @@ export default function LandingPage() {
             <a href="#how" className="transition hover:text-white">
               How it works
             </a>
+            <Link href="/signup" className="transition hover:text-white">
+              Volunteer sign-up
+            </Link>
             <a href="#agents" className="transition hover:text-white">
               The agents
             </a>
@@ -172,6 +175,12 @@ export default function LandingPage() {
                 className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand-500 px-5 text-sm font-semibold text-slate-950 shadow-lg shadow-brand-500/25 hover:bg-brand-400"
               >
                 See it working <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/signup"
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 text-sm font-medium text-white hover:bg-white/10"
+              >
+                I&apos;d like to volunteer <ArrowRight className="h-4 w-4" />
               </Link>
               <a
                 href="#how"
@@ -354,6 +363,9 @@ export default function LandingPage() {
           <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-xs text-slate-400 sm:flex-row sm:px-6">
             <span>VolunteerShift · Built for the AWS Agents for Humans hackathon · MIT licence</span>
             <span className="inline-flex items-center gap-4">
+              <Link href="/signup" className="hover:text-white">
+                Volunteer sign-up
+              </Link>
               <Link href="/dashboard" className="hover:text-white">
                 Dashboard
               </Link>

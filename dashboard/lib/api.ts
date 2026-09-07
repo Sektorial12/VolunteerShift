@@ -57,6 +57,7 @@ export interface Shift {
   assigned_volunteers: Assignment[];
   status: ShiftStatus | string;
   scheduled_at?: string | null;
+  invitations_sent?: boolean;
   reminder_48h_sent?: boolean;
   reminder_2h_sent?: boolean;
   no_show_checked?: boolean;
@@ -147,6 +148,15 @@ export interface ShiftCreateInput {
   required_volunteers: number;
 }
 
+export interface VolunteerSignupInput {
+  name: string;
+  email: string;
+  phone: string;
+  skills: string[];
+  availability: Record<string, string[]>;
+  preferred_channels: string[];
+}
+
 // ---------- Fetch helpers ----------
 
 export class ApiError extends Error {
@@ -211,6 +221,8 @@ export const api = {
       "/api/volunteers/respond",
       { volunteer_id: volunteerId, shift_id: shiftId, response },
     ),
+  signupVolunteer: (input: VolunteerSignupInput) =>
+    postJson<{ status: string; volunteer_id: string; message?: string }>("/api/ingest/volunteer", input),
   communications: () => fetchJson<Communication[]>("/api/communications"),
   reports: () => fetchJson<Report[]>("/api/reports"),
   report: (id: string) => fetchJson<Report>(`/api/reports/${encodeURIComponent(id)}`),

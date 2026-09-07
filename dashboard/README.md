@@ -54,6 +54,7 @@ timeout, both as `{"detail": "..."}` so the UI shows a real message.
 | Path | Group | What it is |
 |---|---|---|
 | `/` | public | Landing page. Live agent console, pipeline walkthrough, stack. |
+| `/signup` | public | Volunteer self-signup form — enters the pool the Scheduler matches against (upserts by email). |
 | `/respond?volunteer_id=..&shift_id=..` | public | One-tap confirm / decline for a volunteer. No admin chrome, no nav. |
 | `/dashboard` | app | Overview: needs-a-decision list, coverage, live tool calls. |
 | `/shifts`, `/shifts/[id]` | app | List with filters; detail with roster, check-in/out, agent triggers. |
@@ -95,12 +96,12 @@ counts assignments that are `confirmed`, `checked_in` or `checked_out` against
 until people actually confirm. If the scheduler is ever changed to hold `open` until
 confirmations arrive, this UI needs no change.
 
-**Nothing in the backend sends a `/respond` link.** Invitation emails contain no URL,
-and the only volunteer-side path is SES inbound reply parsing. Until that changes,
-each roster row has a **Link** button that copies
-`/respond?volunteer_id=..&shift_id=..` for that volunteer, which is also how to drive
-the confirm flow in a demo. Putting that URL into the invitation template would close
-the loop properly.
+**Invitation emails now carry the `/respond` link.** The backend's `invite`
+automation action sends every matched volunteer a personalized email containing
+their exact `/respond?volunteer_id=..&shift_id=..` URL (built from the backend's
+`PUBLIC_DASHBOARD_URL` env), so the confirm loop closes without the coordinator.
+Volunteers can also just reply YES/NO to the email once SES inbound is live.
+The roster **Link** button still copies the same URL for manual sharing.
 
 **Audit `result` is double-encoded.** It is `json.dumps(str(python_dict))`, so it
 arrives as a string containing a Python repr. `auditResultText()` unwraps it to show
@@ -139,7 +140,7 @@ forwards as `API_KEY`. `/respond` must stay public either way.
 
 Small changes that would make the UI tell a truer story:
 
-1. Include the `/respond` URL in invitation and reminder email bodies.
+1. ~~Include the `/respond` URL in invitation and reminder email bodies.~~ **Done** — the `invite` automation action embeds each volunteer's exact link (backend `PUBLIC_DASHBOARD_URL`).
 2. Hold shift `status` at `open` / `partially_filled` until confirmations arrive,
    rather than flipping to `filled` on assignment.
 3. Assign close to `required_volunteers`, not double.

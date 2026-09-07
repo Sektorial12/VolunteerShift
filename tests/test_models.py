@@ -45,18 +45,35 @@ def test_shift_model_roundtrip():
         assigned_volunteers=[
             Assignment(volunteer_id="v001", status=AssignmentStatus.CONFIRMED),
         ],
+        invitations_sent=True,
         status=ShiftStatus.PARTIALLY_FILLED,
     )
     d = s.to_dict()
     assert d["id"] == "s001"
     assert d["required_volunteers"] == 3
     assert d["assigned_volunteers"][0]["volunteer_id"] == "v001"
+    assert d["invitations_sent"] is True
 
     s2 = Shift.from_dict(d)
     assert s2.id == s.id
     assert s2.required_volunteers == s.required_volunteers
     assert len(s2.assigned_volunteers) == 1
     assert s2.assigned_volunteers[0].volunteer_id == "v001"
+    assert s2.invitations_sent is True
+
+
+def test_shift_invitations_sent_defaults_false_on_old_rows():
+    from vshift.models.entities import Shift
+
+    # Rows written before the invitations_sent field existed lack the key
+    s = Shift.from_dict({
+        "id": "s001",
+        "program_name": "Food Bank",
+        "start_time": "2026-08-15T10:00:00+00:00",
+        "end_time": "2026-08-15T14:00:00+00:00",
+        "location": "123 Main St",
+    })
+    assert s.invitations_sent is False
 
 
 def test_communication_model_roundtrip():

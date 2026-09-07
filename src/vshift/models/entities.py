@@ -153,6 +153,7 @@ class Shift:
     assigned_volunteers: list[Assignment] = field(default_factory=list)
     status: ShiftStatus = ShiftStatus.OPEN
     scheduled_at: str = ""
+    invitations_sent: bool = False
     reminder_48h_sent: bool = False
     reminder_2h_sent: bool = False
     no_show_checked: bool = False
@@ -170,6 +171,7 @@ class Shift:
             "assigned_volunteers": [a.to_dict() for a in self.assigned_volunteers],
             "status": self.status.value,
             "scheduled_at": self.scheduled_at,
+            "invitations_sent": self.invitations_sent,
             "reminder_48h_sent": self.reminder_48h_sent,
             "reminder_2h_sent": self.reminder_2h_sent,
             "no_show_checked": self.no_show_checked,
@@ -191,6 +193,7 @@ class Shift:
             ],
             status=ShiftStatus(data.get("status", "open")),
             scheduled_at=data.get("scheduled_at", ""),
+            invitations_sent=bool(data.get("invitations_sent", False)),
             reminder_48h_sent=bool(data.get("reminder_48h_sent", False)),
             reminder_2h_sent=bool(data.get("reminder_2h_sent", False)),
             no_show_checked=bool(data.get("no_show_checked", False)),

@@ -355,43 +355,44 @@ async def ingest_email_reply(req: EmailReplyRequest) -> dict[str, Any]:
 
 @app.post("/api/trigger")
 async def trigger_agent(req: TriggerRequest) -> dict[str, Any]:
-    """Manually trigger a specific agent action on real data."""
-    from vshift.agents.scheduler import create_scheduler_agent
-    from vshift.agents.communicator import create_communicator_agent
-    from vshift.agents.recovery import create_recovery_agent
-    from vshift.agents.tracker import create_tracker_agent
-    from vshift.agents.reporter import create_reporter_agent
+    """Manually trigger a specific agent action on real data.
 
-    if req.action == "schedule" and req.shift_id:
-        agent = create_scheduler_agent()
-        _wire(agent, ["assign_volunteers_to_shift"],
-              f"Query shift {req.shift_id}, find matching volunteers, and call assign_volunteers_to_shift to assign the top candidates. You MUST actually call the assign_volunteers_to_shift tool.")
-        result = agent(f"Find, match, and assign volunteers for shift {req.shift_id}. Query the shift, find matching volunteers, rank them, and use assign_volunteers_to_shift to assign the top candidates.")
-        return {"action": "schedule", "result": str(result)}
+    Shift actions delegate to the automation layer so manual and automatic runs
+    share the same prompts, hooks, and idempotency flags. ``schedule`` also
+    sends the invitations, matching what the automation worker does in one
+    cycle.
+    """
+    from vshift.automation import invitations_pending, run_action
 
-    elif req.action == "remind" and req.shift_id:
-        agent = create_communicator_agent()
-        _wire(agent, ["log_communication"],
-              f"Send 48-hour reminders to all confirmed volunteers for shift {req.shift_id} using send_email/send_sms, and call log_communication for each. You MUST call the tools.")
-        result = agent(f"Send 48-hour reminders to all confirmed volunteers for shift {req.shift_id}.")
-        return {"action": "remind", "result": str(result)}
-
-    elif req.action == "noshow_check" and req.shift_id:
-        agent = create_recovery_agent()
-        _wire(agent, ["check_shift_coverage"],
-              f"Call check_shift_coverage for shift {req.shift_id} to detect no-shows, and act on the results. You MUST call the check_shift_coverage tool.")
-        result = agent(f"Check shift {req.shift_id} for no-shows and find replacements if needed.")
-        return {"action": "noshow_check", "result": str(result)}
-
-    elif req.action == "track" and req.shift_id:
-        agent = create_tracker_agent()
-        _wire(agent, ["log_hours"],
-              f"Call check_shift_coverage for shift {req.shift_id}, then for each volunteer who checked in and out call log_hours and update_volunteer_profile. You MUST actually call log_hours.")
-        result = agent(f"Track hours and update profiles for completed shift {req.shift_id}. Call check_shift_coverage, then for each volunteer who checked in and out call log_hours and update_volunteer_profile. You MUST actually call these tools, not just describe them.")
-        return {"action": "track", "result": str(result)}
+    if req.action in ("schedule", "remind", "noshow_check", "track") and req.shift_id:
+        actions = ["remind_48h" if req.action == "remind" else req.action]
+        if req.action == "schedule":
+            actions.append("invite")
+        results: list[dict[str, Any]] = []
+        for action in actions:
+            # Only invite when the scheduler actually left uncontacted volunteers
+            # (a failed schedule above must not mark invitations as sent).
+            if action == "invite" and not invitations_pending(req.shift_id):
+                continue
+            try:
+                results.append(run_action(action, req.shift_id))
+            except Exception as e:  # noqa: BLE001
+                results.append({"action": action, "shift_id": req.shift_id, "error": str(e)})
+        return {
+            "action": req.action,
+            "shift_id": req.shift_id,
+            "results": results,
+            "result": " | ".join(
+                f"[{r.get('action')}] {r.get('error') or r.get('result', '')}"
+                for r in results
+            ),
+        }
 
     elif req.action == "report":
         from datetime import timedelta
+
+        from vshift.agents.reporter import create_reporter_agent
+
         agent = create_reporter_agent()
         _wire(agent, ["generate_report"],
               "You MUST call the generate_report tool to create and store the report. Call it now with the exact dates provided.")

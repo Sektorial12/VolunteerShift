@@ -147,6 +147,7 @@ cp .env.example .env
 # - BEDROCK_MODEL_ID (default: mistral.mistral-large-3-675b-instruct)
 # - SES_SOURCE_EMAIL (must be verified in SES sandbox)
 # - SNS_TOPIC_ARN (from step 2b below)
+# - PUBLIC_DASHBOARD_URL (where volunteers can open /respond links, e.g. http://localhost:3000)
 ```
 
 ### 2a. Verify SES email addresses (sandbox mode)
@@ -238,6 +239,7 @@ Routes:
 | Path | What it is |
 |------|------------|
 | `/` | Public landing page with a live agent console |
+| `/signup` | Public volunteer sign-up form (enters the pool the Scheduler matches against) |
 | `/respond?volunteer_id=..&shift_id=..` | Public one-tap confirm / decline page for volunteers (no admin chrome) |
 | `/dashboard` | Coordinator overview: needs-a-decision list, confirmed-seat coverage, live tool calls |
 | `/shifts`, `/shifts/[id]` | Shift list with filters; detail with roster, check-in/out, agent triggers, respond links |
@@ -256,7 +258,8 @@ until volunteers actually confirm.
 Via the dashboard, or via API:
 
 ```bash
-# Schedule volunteers for a shift
+# Schedule volunteers for a shift (also sends the invitation emails with
+# one-tap confirm links, same as the automation worker)
 curl -X POST http://localhost:8000/api/trigger \
   -H "Content-Type: application/json" \
   -d '{"action": "schedule", "shift_id": "s001"}'

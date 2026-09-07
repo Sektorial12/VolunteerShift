@@ -1,0 +1,69 @@
+# 2026-09-07 — Real volunteer end-to-end flow
+
+## Goal
+
+Close the loop for real volunteers: self-signup → automatic matching → invitation
+email with a one-tap confirm link → confirmation → reminders. Before this change,
+`assign_volunteers_to_shift` only wrote `INVITED` rows — nothing ever emailed the
+volunteers, and there was no public signup path.
+
+## Changes
+
+### Backend
+
+- `config.py`: new `PUBLIC_DASHBOARD_URL` (default `http://localhost:3000`). Used to
+  build `/respond?volunteer_id=..&shift_id=..` links embedded in agent-sent emails.
+- `models/entities.py`: `Shift.invitations_sent` flag (defaults False on old rows).
+- `automation.py`:
+  - New `invite` action: Communicator emails every `invited` volunteer. Idempotent via
+    `invitations_sent`. Due whenever invited-but-uncontacted assignments exist (not
+    COMPLETED/CANCELLED).
+  - `respond_link()` helper + `_communicator_context()`: pre-fetches shift + volunteer
+    contact info and builds the task prompt. **Design decision:** the Communicator has
+    no query tools, so the caller hands it real data with exact emails/links instead of
+    letting the model look up (or invent) addresses. Rejected alternative: giving the
+    Communicator `get_shift`/`get_volunteer` tools — more tool round-trips and a
+    hallucination risk on addresses; the pre-fetch keeps sends deterministic.
+  - `remind_48h`/`remind_2h` now also get pre-fetched confirmed-volunteer data (they
+    previously had none — the agent could not know who to remind).
+  - Empty recipient set (e.g. zero confirmed volunteers) marks the flag done and skips
+    the model call instead of forcing a bogus send.
+  - `run_due_cycle` re-reads the shift after each action so `invite` fires in the same
+    cycle as `schedule`; a failed action breaks that shift's loop and retries next cycle.
+- `api.py` `/api/trigger`: shift actions now delegate to `automation.run_action` so
+  manual and automatic runs share prompts/hooks/idempotency. Manual `schedule` also
+  runs `invite` (gated by `invitations_pending` so a failed schedule cannot mark
+  invitations as sent). Response adds `results` list; `result` stays a string for the
+  dashboard. `report` unchanged.
+- `agents/prompts.py`: COMMUNICATOR_SYSTEM_PROMPT rewritten — use only provided
+  addresses, copy the respond link verbatim, reply-YES/NO fallback, log every send
+  with the correct `message_type`, skip MISSING RECORD lines.
+
+### Frontend
+
+- New public page `app/(public)/signup/page.tsx`: volunteer self-signup (name, email,
+  phone, skills chips + free text, day×slot availability matrix, channel preference)
+  posting to `/api/ingest/volunteer` (upserts by email). Uses the same skill/day/slot
+  vocabulary as the seed data and the Scheduler matcher.
+- `lib/api.ts`: `signupVolunteer`, `VolunteerSignupInput`, `Shift.invitations_sent`.
+- Landing page: signup links in header nav, hero CTA, footer.
+- Automation page: rules list split — Scheduler matches/assigns; Communicator invites
+  right after assignment (was previously claimed but not implemented).
+
+## Verification
+
+- `pytest tests/test_models.py tests/test_automation.py tests/test_agents.py
+  tests/test_ingestion.py` — 34 passed (new: invite due/not-due cases, respond link
+  format, invitations_sent roundtrip + old-row default).
+- `npm run build` — passes, 12 routes including `/signup`.
+- Read-only smoke against live DynamoDB: `_communicator_context` produced correct
+  volunteer lines + links for all 5 seeded shifts.
+- NOT verified: a full live `invite` run (needs Bedrock model call + SES). Expect the
+  first cycle after deploy to send invitations for the existing backtest shifts —
+  re-seed first if you want a clean demo (sandbox SES will reject the @example.org
+  recipients).
+
+## Deploy notes
+
+- VPS `.env` needs `PUBLIC_DASHBOARD_URL` set to the volunteer-reachable dashboard URL
+  before restart, or emailed links will point at localhost.

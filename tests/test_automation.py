@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from vshift.models.entities import Shift, ShiftStatus
+from vshift.models.entities import Assignment, AssignmentStatus, Shift, ShiftStatus
 
 
 def _dt(offset: timedelta) -> str:
@@ -35,6 +35,63 @@ def test_scheduled_shift_does_not_reschedule():
     now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
     shift = _shift(scheduled_at="2026-08-15T11:00:00+00:00")
     assert "schedule" not in due_actions(shift, now)
+
+
+def test_invite_due_for_assigned_volunteers():
+    from vshift.automation import due_actions
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        scheduled_at="done",
+        status=ShiftStatus.PARTIALLY_FILLED,
+        assigned_volunteers=[Assignment(volunteer_id="v001", status=AssignmentStatus.INVITED)],
+    )
+    assert "invite" in due_actions(shift, now)
+
+
+def test_invite_not_due_after_invitations_sent():
+    from vshift.automation import due_actions
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        scheduled_at="done",
+        invitations_sent=True,
+        status=ShiftStatus.PARTIALLY_FILLED,
+        assigned_volunteers=[Assignment(volunteer_id="v001", status=AssignmentStatus.INVITED)],
+    )
+    assert "invite" not in due_actions(shift, now)
+
+
+def test_invite_not_due_without_invited_assignments():
+    from vshift.automation import due_actions
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        scheduled_at="done",
+        status=ShiftStatus.PARTIALLY_FILLED,
+        assigned_volunteers=[Assignment(volunteer_id="v001", status=AssignmentStatus.DECLINED)],
+    )
+    assert "invite" not in due_actions(shift, now)
+
+
+def test_invite_not_due_for_completed_shift():
+    from vshift.automation import due_actions
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        scheduled_at="done",
+        status=ShiftStatus.COMPLETED,
+        assigned_volunteers=[Assignment(volunteer_id="v001", status=AssignmentStatus.INVITED)],
+    )
+    assert "invite" not in due_actions(shift, now)
+
+
+def test_respond_link_format():
+    from vshift.automation import respond_link
+
+    link = respond_link("v001", "s001")
+    assert link.startswith("http")
+    assert link.endswith("/respond?volunteer_id=v001&shift_id=s001")
 
 
 def test_remind_48h_fires_near_shift():

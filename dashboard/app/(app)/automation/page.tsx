@@ -9,7 +9,8 @@ import { Badge, Button, Card, CardHeader, Dot, ErrorState, PageHeader, Skeleton,
 import { useToast } from "@/components/ui/toast";
 
 const RULES = [
-  { icon: CalendarCheck, agent: "Scheduler", when: "As soon as a shift is created", does: "Match, assign and invite volunteers.", tone: "info" as const },
+  { icon: CalendarCheck, agent: "Scheduler", when: "As soon as a shift is created", does: "Match and assign volunteers.", tone: "info" as const },
+  { icon: Bell, agent: "Communicator", when: "Right after assignment", does: "Invitation email with a one-tap confirm link for every matched volunteer.", tone: "violet" as const },
   { icon: Bell, agent: "Communicator", when: "48 hours before start", does: "Reminder to every confirmed volunteer.", tone: "violet" as const },
   { icon: Bell, agent: "Communicator", when: "2 hours before start", does: "Final reminder with location details.", tone: "violet" as const },
   { icon: LifeBuoy, agent: "Recovery", when: "15 minutes after start", does: "Detect no-shows, contact replacements, alert the coordinator.", tone: "warning" as const },
