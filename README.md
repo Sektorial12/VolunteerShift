@@ -212,6 +212,7 @@ That means:
 - `API_URL` is runtime config: change it on the host and restart, no rebuild.
 
 `NEXT_PUBLIC_API_URL` from the original setup is still honoured as the proxy target.
+Full frontend documentation lives in [`dashboard/README.md`](dashboard/README.md).
 
 ## Run Locally
 
