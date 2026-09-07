@@ -146,7 +146,7 @@ export default function DashboardPage() {
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Left: attention + upcoming */}
-        <div className="space-y-6 xl:col-span-2">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <Card>
             <CardHeader
               icon={AlertTriangle}
@@ -222,7 +222,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Right: live agent feed + comms + report */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader
               icon={Activity}

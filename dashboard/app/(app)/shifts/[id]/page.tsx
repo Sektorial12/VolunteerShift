@@ -114,7 +114,7 @@ function ShiftDetail() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main column */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <Card>
             <CardHeader
               icon={Users}
@@ -165,7 +165,7 @@ function ShiftDetail() {
         </div>
 
         {/* Side column */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader icon={Users} title="Coverage" />
             <div className="flex items-end justify-between">

@@ -428,7 +428,9 @@ export function SegmentedControl<T extends string>({
   size?: "sm" | "md";
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+    // max-w-full + overflow-x-auto so a long option set scrolls on narrow
+    // screens instead of forcing the whole page wider than the viewport.
+    <div className="scroll-thin inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5">
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -437,7 +439,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(o.value)}
             className={cx(
-              "inline-flex items-center gap-1.5 rounded-md font-medium transition",
+              "inline-flex shrink-0 items-center gap-1.5 rounded-md font-medium transition",
               size === "sm" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm",
               active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
             )}

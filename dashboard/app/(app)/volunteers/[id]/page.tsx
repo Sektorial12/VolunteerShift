@@ -99,7 +99,7 @@ export default function VolunteerDetailPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <div className="grid gap-4 sm:grid-cols-3">
             <Card>
               <p className="text-xs font-medium text-slate-500">Reliability</p>
@@ -185,7 +185,7 @@ export default function VolunteerDetailPage() {
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader icon={Star} title="Skills" />
             {v.skills?.length ? (

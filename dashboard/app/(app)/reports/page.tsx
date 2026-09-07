@@ -47,7 +47,7 @@ export default function ReportsPage() {
       {error && !data && <ErrorState message={error} onRetry={() => void reload()} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <div className="stagger grid grid-cols-2 gap-4 xl:grid-cols-4">
             <StatCard label="Latest coverage" value={latest ? pct(latest.coverage_rate) : "—"} icon={TrendingUp} tone="success" loading={loading} hint={latest ? `${fmtDate(latest.start_date)} – ${fmtDate(latest.end_date)}` : undefined} />
             <StatCard label="No-show rate" value={latest ? pct(latest.no_show_rate) : "—"} icon={Users} tone={latest && rate(latest.no_show_rate) > 15 ? "danger" : "warning"} loading={loading} />
@@ -85,7 +85,7 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader icon={FileText} title="Generate a report" subtitle="Covers the last 7 days plus the next 14 of scheduled shifts." />
             <AgentActions actions={["report"]} onDone={() => void reload()} />
