@@ -67,3 +67,21 @@ volunteers, and there was no public signup path.
 
 - VPS `.env` needs `PUBLIC_DASHBOARD_URL` set to the volunteer-reachable dashboard URL
   before restart, or emailed links will point at localhost.
+
+## Live deployment (2026-09-07, verified)
+
+Deployed to the Oracle VPS via commit `3009717` + rsync (the VPS `~/vshift` is not a
+git clone; `.env`/`.venv` preserved), `PUBLIC_DASHBOARD_URL=http://localhost:3000`
+added, service restarted. First automation cycle fired `invite` for all 5 backtest
+shifts and behaved exactly as designed:
+
+- Every `invited`-status volunteer got an invitation logged (9 invitation comms);
+  2 SES-rejected sends were escalated as `coordinator_notification` instead
+- s003 (all volunteers already confirmed from backtesting) correctly skipped the
+  invite (marked done, "no invited volunteers")
+- All shifts now show `invitations_sent: true`; no cycle errors
+- Invitation bodies contained the exact `/respond` link and the YES/NO reply fallback
+- Known quirk: the agent's final narrative claimed one @example.org send "succeeded"
+  when SES rejected it — trust the comms table, not the agent's self-report
+- All SES deliveries to @example.org fail (sandbox + unverified domain), as expected;
+  the flow itself is complete, delivery is the external blocker
