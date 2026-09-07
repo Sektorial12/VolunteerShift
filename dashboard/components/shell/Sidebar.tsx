@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cx } from "@/components/ui";
 import { BackendStatus } from "./BackendStatus";
+import { CommandTrigger } from "./CommandPalette";
 
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -71,8 +72,11 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 export function Sidebar() {
   return (
     <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white/80 backdrop-blur sticky top-0 h-screen">
-      <div className="px-5 py-4 border-b border-slate-200">
+      <div className="border-b border-slate-200 px-5 py-4">
         <Brand />
+      </div>
+      <div className="px-3 pt-3">
+        <CommandTrigger />
       </div>
       <SidebarNav />
       <div className="border-t border-slate-200 p-3">

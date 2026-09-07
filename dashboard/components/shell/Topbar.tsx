@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, ExternalLink } from "lucide-react";
 import { Brand, MobileDrawer, NAV_ITEMS } from "./Sidebar";
+import { CommandTriggerIcon } from "./CommandPalette";
 
 export function Topbar() {
   const [open, setOpen] = useState(false);
@@ -24,6 +25,7 @@ export function Topbar() {
         <Brand compact />
         <span className="text-sm font-medium text-slate-700">{current?.label ?? ""}</span>
         <span className="flex-1" />
+        <CommandTriggerIcon />
         <Link href="/" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900">
           Site <ExternalLink className="h-3 w-3" />
         </Link>
