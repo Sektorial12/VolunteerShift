@@ -1,16 +1,16 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { CalendarDays, Clock, LogIn, LogOut, Mail, MapPin, RefreshCw, Users, Bot, Link2, Check } from "lucide-react";
-import { api, type AgentAction, type Assignment } from "@/lib/api";
-import { usePolling, useNow, errMessage } from "@/lib/hooks";
-import { assignmentStatusMeta, coverage, durationHours, fmtDateTime, fmtRelative, fmtShiftWindow, humanize, messageTypeMeta, shiftStatusMeta } from "@/lib/format";
+import { CalendarDays, Clock, Mail, MapPin, RefreshCw, Users, Bot } from "lucide-react";
+import { api, type AgentAction } from "@/lib/api";
+import { usePolling, useNow } from "@/lib/hooks";
+import { coverage, durationHours, fmtDateTime, fmtRelative, fmtShiftWindow, humanize, messageTypeMeta, shiftStatusMeta } from "@/lib/format";
 import { Badge, Button, Card, CardHeader, Chip, EmptyState, ErrorState, PageHeader, Skeleton, SkeletonRows, cx } from "@/components/ui";
-import { useToast } from "@/components/ui/toast";
 import { AgentActions } from "@/components/agents/AgentActions";
 import { CoverageMeter, LifecycleTrail, PhasePill } from "@/components/shifts/ShiftCard";
+import { Roster } from "@/components/shifts/Roster";
 import { VolunteerName } from "@/components/volunteers/VolunteerDirectory";
 
 const VALID_ACTIONS: AgentAction[] = ["schedule", "remind", "noshow_check", "track"];
@@ -33,9 +33,6 @@ function ShiftDetail() {
   const shiftQ = usePolling(() => api.shift(id), 10_000, [id]);
   const commsQ = usePolling(() => api.communications(), 20_000, [id]);
   const now = useNow(30_000);
-  const toast = useToast();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
 
   const shift = shiftQ.data;
   const comms = useMemo(
@@ -47,31 +44,6 @@ function ShiftDetail() {
     const order: Record<string, number> = { checked_in: 0, checked_out: 1, confirmed: 2, invited: 3, no_response: 4, replaced: 5, declined: 6, no_show: 7 };
     return [...(shift?.assigned_volunteers ?? [])].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
   }, [shift]);
-
-  const checkInOut = async (a: Assignment, kind: "in" | "out") => {
-    setBusy(`${a.volunteer_id}:${kind}`);
-    try {
-      if (kind === "in") await api.checkIn(id, a.volunteer_id);
-      else await api.checkOut(id, a.volunteer_id);
-      toast.success(kind === "in" ? "Checked in" : "Checked out");
-      await shiftQ.reload();
-    } catch (e) {
-      toast.error("Could not update attendance", errMessage(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const copyRespondLink = async (volunteerId: string) => {
-    const url = `${window.location.origin}/respond?volunteer_id=${encodeURIComponent(volunteerId)}&shift_id=${encodeURIComponent(id)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(volunteerId);
-      setTimeout(() => setCopied(null), 1500);
-    } catch {
-      toast.info("Invitation link", url);
-    }
-  };
 
   if (shiftQ.error && !shift) {
     return (
@@ -149,80 +121,7 @@ function ShiftDetail() {
               title={`Roster · ${roster.length} assigned`}
               subtitle={`${cov.committed} of ${cov.required} seats confirmed · ${cov.pending} awaiting reply`}
             />
-            {roster.length === 0 ? (
-              <EmptyState
-                compact
-                icon={Users}
-                title="No volunteers assigned yet"
-                description="Run the Scheduler agent to match and invite the best-fit volunteers."
-              />
-            ) : (
-              <div className="-mx-5 overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                      <th className="px-5 py-2 font-medium">Volunteer</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                      <th className="px-3 py-2 font-medium">Confirmed</th>
-                      <th className="px-3 py-2 font-medium">In</th>
-                      <th className="px-3 py-2 font-medium">Out</th>
-                      <th className="px-5 py-2 text-right font-medium">Attendance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {roster.map((a) => {
-                      const m = assignmentStatusMeta(a.status);
-                      const canIn = ["confirmed", "invited", "no_response", "no_show", "replaced"].includes(a.status);
-                      const canOut = a.status === "checked_in";
-                      return (
-                        <tr key={a.volunteer_id} className="hover:bg-slate-50/60">
-                          <td className="px-5 py-2.5">
-                            <VolunteerName id={a.volunteer_id} />
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <Badge tone={m.tone} dot>
-                              {m.label}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-2.5 text-xs text-slate-500 tabular">{a.confirmed_at ? fmtDateTime(a.confirmed_at) : "—"}</td>
-                          <td className="px-3 py-2.5 text-xs text-slate-500 tabular">{a.checked_in_at ? fmtDateTime(a.checked_in_at) : "—"}</td>
-                          <td className="px-3 py-2.5 text-xs text-slate-500 tabular">{a.checked_out_at ? fmtDateTime(a.checked_out_at) : "—"}</td>
-                          <td className="px-5 py-2.5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={copied === a.volunteer_id ? Check : Link2}
-                                title="Copy the one-tap response link for this volunteer"
-                                onClick={() => copyRespondLink(a.volunteer_id)}
-                              >
-                                {copied === a.volunteer_id ? "Copied" : "Link"}
-                              </Button>
-                              {canOut ? (
-                                <Button size="sm" variant="secondary" icon={LogOut} loading={busy === `${a.volunteer_id}:out`} onClick={() => checkInOut(a, "out")}>
-                                  Check out
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  icon={LogIn}
-                                  disabled={!canIn}
-                                  loading={busy === `${a.volunteer_id}:in`}
-                                  onClick={() => checkInOut(a, "in")}
-                                >
-                                  Check in
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <Roster shiftId={shift.id} assignments={roster} onChanged={() => void shiftQ.reload()} />
           </Card>
 
           <Card>
