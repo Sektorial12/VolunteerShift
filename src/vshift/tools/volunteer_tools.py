@@ -333,14 +333,28 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
     ses = boto3.client("ses", region_name=config.aws_region)
     response = None
     try:
-        response = _retry(lambda: ses.send_email(
-            Source=config.ses_source_email,
-            Destination={"ToAddresses": [to]},
-            Message={
-                "Subject": {"Data": subject},
-                "Body": {"Text": {"Data": body}},
-            },
-        ))
+        def _send(config_set: str | None):
+            kwargs: dict = {
+                "Source": config.ses_source_email,
+                "Destination": {"ToAddresses": [to]},
+                "Message": {
+                    "Subject": {"Data": subject},
+                    "Body": {"Text": {"Data": body}},
+                },
+            }
+            if config_set:
+                kwargs["ConfigurationSetName"] = config_set
+            return ses.send_email(**kwargs)
+
+        try:
+            # Route through the feedback-tracking config set when present
+            response = _retry(lambda: _send("vshift-transactional"))
+        except Exception as e:
+            if "ConfigurationSetDoesNotExist" in str(e):
+                logger.warning("Config set vshift-transactional missing; sending without it")
+                response = _retry(lambda: _send(None))
+            else:
+                raise
         metrics.communications_sent(channel="email")
         return {
             "message_id": response["MessageId"],
