@@ -49,3 +49,28 @@ makes the README match the deployed system, and adds a demo reset.
 - Verified on throwaway `vshift-test-*` tables (junk rows cleared, extras gone,
   counts 50/5/0/0/0, `s001` future-dated, flags fresh); test tables deleted.
   Unit suite: 27 passed.
+
+## Scheduler stall — root cause and fix (found during live e2e test)
+
+A live test (fresh volunteer + fresh shift, picked up by the automation worker)
+stalled: the shift was marked scheduled with zero assignments, so `invite`
+never fired. The audit trail showed the Scheduler agent had queried
+`query_volunteers(day="friday")` — it computed the shift's weekday itself and
+got it wrong (the shift is on a Saturday), concluded "no candidates" from the
+correctly-empty result, and then failed to call `assign_volunteers_to_shift`
+even across both reliability-hook resumes.
+
+Fixes:
+
+- The automation `schedule` prompt now routes the agent through
+  `match_volunteers_to_shifts` (which handles skills/availability matching
+  internally) instead of inviting the model to filter by day itself.
+- `db.scan` now uses `ConsistentRead=True` so a volunteer written seconds
+  before a cycle (the /signup -> auto-schedule demo flow) can never be
+  invisible to the agent's first read.
+
+Verified live after deploying: manual trigger ran the full chain —
+`match_volunteers_to_shifts` -> `assign_volunteers_to_shift` (1/1 assigned,
+shift filled) -> `send_email` (SES message id, status sent) ->
+`log_communication`, with `invitations_sent` persisted on the shift.
+
