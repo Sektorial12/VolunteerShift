@@ -1,6 +1,8 @@
 # VolunteerShift (Vshift)
 
-Autonomous volunteer coordination agent for mid-size nonprofits. Built with the Strands Agents SDK and deployed on Amazon Bedrock AgentCore.
+Autonomous volunteer coordination agent for mid-size nonprofits, built with the Strands Agents SDK: a five-agent system (Scheduler, Communicator, Recovery, Tracker, Reporter) that runs the volunteer shift lifecycle end to end on AWS (DynamoDB, S3, SES, SNS, CloudWatch).
+
+**Live demo:** <https://volshift.xyz> — volunteer sign-up at [`/signup`](https://volshift.xyz/signup), one-tap confirm/decline at `/respond`, coordinator console at [`/dashboard`](https://volshift.xyz/dashboard). The backend runs as a systemd service behind Caddy (automatic HTTPS); a Bedrock AgentCore Runtime deployment path is also included (see [Deploy](#deploy)).
 
 ## What It Does
 
@@ -21,49 +23,40 @@ Volunteer coordinators at mid-size nonprofits ($500K-$10M budget, 50-500 volunte
 ## Architecture
 
 ```
-                    +-------------------+
-                    |   Web Dashboard   |
-                    |  (Next.js/React)  |
-                    +--------+----------+
-                             |
-                             v
-                    +--------+----------+
-                    |   FastAPI Server  |
-                    |  (api.py)         |
-                    +--------+----------+
-                             |
-                             v
-          +------------------+------------------+
-          |     Multi-Agent Graph (Strands)     |
-          |                                      |
-          |  Scheduler -> Communicator ->        |
-          |  Recovery -> Tracker -> Reporter     |
-          |                                      |
-          |  Each agent has dedicated tools,     |
-          |  system prompts, and audit hooks     |
-          +------------------+------------------+
-                             |
-          +------------------+------------------+
-          |                                      |
-          v                                      v
-  +-------+------+                       +-------+-------+
-  |  DynamoDB    |                       |  AWS SES      |
-  |  (5 tables)  |                       |  (Email)      |
-  +--------------+                       +---------------+
-          |                                      |
-          v                                      v
-  +-------+------+                       +-------+-------+
-  |  Amazon S3   |                       |  AWS SNS      |
-  |  (Reports,   |                       |  (SMS)        |
-  |   Sessions)  |                       +---------------+
-  +--------------+
-          |
-          v
-  +-------+------+
-  |  Bedrock     |
-  |  (Mistral    |
-  |   Large 3)   |
-  +--------------+
+ Volunteers (public)                       Coordinator
+   |                                          |
+   v                                          v
+ /signup  /respond              https://volshift.xyz (Caddy, HTTPS)
+   |                                          |
+   +----------------> Next.js dashboard <-----+
+                           |   same-origin /api proxy
+                           v
+                    FastAPI server (api.py)
+                           |
+           +---------------+------------------+
+           |                                  |
+    Automation worker                   Manual triggers
+    (60s cycle, idempotent,            (dashboard /
+     due-action dispatch)              POST /api/trigger)
+           |                                  |
+           +---------------+------------------+
+                           v
+            Strands multi-agent system
+      Scheduler -> Communicator -> Recovery
+                 -> Tracker -> Reporter
+      (dedicated tools + prompts + audit hooks,
+       Mistral Large 3 on Bedrock via Mantle API)
+                           |
+     +---------+---------+---------+---------+
+     v         v         v         v         v
+  DynamoDB    S3       SES       SNS     CloudWatch
+  (5 tables,  (reports) (outbound (SMS)   (metrics
+   state of              email)            + OTel)
+   record)
+                           ^
+                           |
+     Inbound replies: MX -> SES receipt rule -> SNS
+     -> Lambda (vshift-ses-inbound) -> /api/ingest/email-reply
 ```
 
 ### Agent Graph
@@ -113,8 +106,10 @@ Custom CloudWatch metrics are emitted under the `Vshift` namespace:
 
 ### Session Management
 
-- **S3SessionManager**: Production session persistence across agent invocations
-- **FileSessionManager**: Local development session persistence
+`vshift.agents.sessions` ships both an S3-backed and a file-backed session manager.
+The current deployment runs agents statelessly — every automation action is a
+discrete task and business state lives in DynamoDB — so no session persistence is
+wired into the live path; the managers are covered by the unit tests.
 
 ## Prerequisites
 
@@ -145,43 +140,49 @@ cp .env.example .env
 # - AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 # - AWS_BEARER_TOKEN_BEDROCK (Bedrock API key from console)
 # - BEDROCK_MODEL_ID (default: mistral.mistral-large-3-675b-instruct)
-# - SES_SOURCE_EMAIL (must be verified in SES sandbox)
-# - SNS_TOPIC_ARN (from step 2b below)
+# - SES_SOURCE_EMAIL (a verified SES identity, e.g. coordinator@volshift.xyz)
+# - SNS_TOPIC_ARN (optional; see 2b below)
 # - PUBLIC_DASHBOARD_URL (where volunteers can open /respond links, e.g. http://localhost:3000)
 ```
 
-### 2a. Verify SES email addresses (sandbox mode)
+### 2a. Configure SES
 
-SES sandbox requires both sender and recipient emails to be verified:
+The live deployment sends from `coordinator@volshift.xyz` behind the verified
+domain identity `volshift.xyz`. Until SES **production access** is granted the
+account stays in sandbox: the sender and every recipient mailbox must be
+verified identities.
 
 ```bash
-# Verify the source email (sender)
-aws ses verify-email-identity --email-address coordinator@vshift.example.org
+# Verify a sending domain (then add the DKIM/SPF DNS records it shows you)
+aws ses verify-domain-identity --domain yourdomain.org
 
-# Verify each volunteer email you want to send to (for demo, use emails you control)
+# Sandbox fallback: verify each inbox you want to deliver to (e.g. your demo inbox)
 aws ses verify-email-identity --email-address your-email@example.com
-
-# Check verification status
-aws ses get-identity-verification-attributes --identities coordinator@vshift.example.org
+aws ses get-identity-verification-attributes --identities your-email@example.com
 ```
 
-### 2b. Create SNS topic for SMS
+Inbound replies (the "reply YES or NO" option in invitation emails) are fully
+wired: MX -> SES receipt rule -> SNS -> Lambda -> `/api/ingest/email-reply`.
+Deploy the bridge with `infra/lambda/deploy-ses-inbound.sh`.
+
+### 2b. (Optional) SNS topic for SMS
+
+`send_sms` publishes directly to phone numbers in E.164 format, so no topic is
+required for SMS to work. `SNS_TOPIC_ARN` is read by the config for future
+fan-out use only.
 
 ```bash
-# Create the topic
 aws sns create-topic --name vshift-sms
-
-# Copy the TopicArn from the output and set it in .env as SNS_TOPIC_ARN
-# Note: SNS SMS requires phone numbers in E.164 format (e.g., +15551234567)
+# Copy the TopicArn into .env as SNS_TOPIC_ARN if you want it configured
 ```
 
 ### 3. Create S3 buckets
 
-The app uses 2 S3 buckets for reports and session state (audit logs are stored in the DynamoDB `vshift-audit` table, not S3):
+The app stores generated reports in S3 (audit logs live in the DynamoDB `vshift-audit` table, not S3):
 
 ```bash
-aws s3 mb s3://vshift-reports
-aws s3 mb s3://vshift-sessions
+aws s3 mb s3://vshift-reports    # Reporter output
+aws s3 mb s3://vshift-sessions   # optional: only needed if session persistence is wired
 ```
 
 ### 4. Create DynamoDB tables and load seed data
@@ -231,7 +232,7 @@ PYTHONPATH=src uvicorn vshift.api:app --reload --port 8000
 cd dashboard
 npm run dev          # http://localhost:3000
 npm run build        # must pass before shipping
-API_URL=http://51.170.132.143:8000 npm start   # production build against the VPS
+API_URL=http://localhost:8000 npm start    # production build; on the VPS the dashboard runs under systemd with this same value, behind Caddy
 ```
 
 Routes:
@@ -280,12 +281,20 @@ curl -X POST http://localhost:8000/api/trigger \
   -d '{"action": "report"}'
 ```
 
-## Deploy to AgentCore
+## Deploy
+
+Two supported paths:
+
+- **VPS (the current live deployment)** — FastAPI as a systemd service, dashboard
+  on the same origin behind Caddy for automatic HTTPS (`https://volshift.xyz`).
+- **Amazon Bedrock AgentCore Runtime** — Docker image -> ECR -> runtime deploy,
+  including the account service-quota prerequisites. Full runbook:
+  [`infra/DEPLOYMENT.md`](infra/DEPLOYMENT.md).
+
+Inbound email bridge (SES -> SNS -> Lambda -> `/api/ingest/email-reply`):
 
 ```bash
-npm install -g @aws/agentcore
-agentcore create --name vshift --framework Strands --protocol HTTP --model-provider Bedrock
-agentcore deploy
+VSHIFT_API_BASE=https://your-host infra/lambda/deploy-ses-inbound.sh
 ```
 
 ## API Endpoints
@@ -332,13 +341,13 @@ PYTHONPATH=src pytest tests/test_integration.py -v
 
 ## Tech Stack
 
-- **Agent Framework**: Strands Agents SDK (Python) v1.52.0
+- **Agent Framework**: Strands Agents SDK (Python), pinned to v1.52.0 (OpenAI-compatible provider against the Bedrock Mantle API)
 - **LLM**: Mistral Large 3 675B via Amazon Bedrock (Mantle API)
-- **Backend**: FastAPI, Python 3.12
+- **Backend**: FastAPI, Python 3.10+ (inbound Lambda bridge runs 3.12)
 - **Frontend**: Next.js 15, React 19, Tailwind CSS, Lucide icons
 - **Database**: Amazon DynamoDB (5 tables)
-- **Storage**: Amazon S3 (reports, session state)
-- **Email**: Amazon SES
-- **SMS**: Amazon SNS
-- **Deployment**: Amazon Bedrock AgentCore Runtime
+- **Storage**: Amazon S3 (reports)
+- **Email**: Amazon SES (outbound via verified domain; inbound via receipt rule + Lambda)
+- **SMS**: Amazon SNS (direct-to-number publishing)
+- **Deployment**: Oracle Cloud VPS (systemd + Caddy HTTPS) at https://volshift.xyz; AgentCore Runtime path in `infra/DEPLOYMENT.md`
 - **License**: MIT

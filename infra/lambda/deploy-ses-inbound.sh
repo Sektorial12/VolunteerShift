@@ -47,8 +47,13 @@ else
 fi
 
 echo "==> Setting env vars"
+ENV_SPEC="Variables={VSHIFT_API_BASE=$API_BASE"
+if [ -n "${VSHIFT_API_KEY:-}" ]; then
+  ENV_SPEC="$ENV_SPEC,VSHIFT_API_KEY=$VSHIFT_API_KEY"
+fi
+ENV_SPEC="$ENV_SPEC}"
 aws lambda update-function-configuration --function-name "$FN_NAME" --region "$REGION" \
-  --environment "Variables={VSHIFT_API_BASE=$API_BASE,VSHIFT_API_KEY=${VSHIFT_API_KEY:-}}" >/dev/null
+  --environment "$ENV_SPEC" >/dev/null
 
 echo "==> Subscribing Lambda to SNS topic"
 FN_ARN=$(aws lambda get-function --function-name "$FN_NAME" --region "$REGION" --query 'Configuration.FunctionArn' --output text)

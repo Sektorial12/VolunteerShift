@@ -1,6 +1,6 @@
-strands-agents>=1.0.0,<2.0.0
+strands-agents==1.52.0
 strands-agents-tools>=0.2.0
-strands-agents[openai]>=1.0.0
+strands-agents[openai]==1.52.0
 boto3>=1.34.0
 botocore>=1.34.0
 fastapi>=0.104.0
