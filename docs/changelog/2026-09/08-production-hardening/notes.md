@@ -95,3 +95,15 @@ planned future integration. Changes: the public signup form offers email only
 `sent`), `send_sms` carries a docstring stating the provisioning requirement,
 and the README frames SMS as implemented-but-future.
 
+## Shift lifecycle statuses were never written (fixed)
+
+`ShiftStatus.IN_PROGRESS` and `ShiftStatus.COMPLETED` existed in the enum but
+no code ever set them — shifts went open -> filled and then stayed "filled"
+forever, so past shifts kept appearing in the dashboard's active list.
+Fixed in `automation.py`: the worker cycle flips staffed shifts
+(partially_filled/filled) to `in_progress` once their start time passes, and
+marking the `track` action done closes the shift as `completed` (unless
+cancelled). Unstaffed open shifts are left alone so late scheduling still
+works. Covered by five new unit tests (suite now 32 passing). Deployed to the
+VPS; existing past-dated shifts closed themselves on the next cycle.
+
