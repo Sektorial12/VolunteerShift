@@ -79,3 +79,19 @@ assignment flipped to `confirmed` — the complete autonomous loop (signup ->
 schedule -> match -> assign -> invite email delivered to the inbox -> one-tap
 confirm) is verified end to end against the live deployment.
 
+## SMS: future integration (decision)
+
+SNS accepts `publish --phone-number` calls but every SMS-related API
+(`GetSMSSandboxAccountStatus`, `GetSMSAttributes`, `ListOriginationNumbers`,
+and `pinpoint-sms-voice-v2 describe-account-attributes`) returns
+`SubscriptionRequiredException` — the account has no AWS End-User Messaging
+subscription, so publishes are silently dead-lettered. Fixing it needs the
+End-User Messaging subscription, sandbox OTP verification, and (for US
+numbers) carrier origination registration measured in days-to-weeks.
+
+Decision: email is the demo channel (the fully verified loop); SMS is a
+planned future integration. Changes: the public signup form offers email only
+(a viewer picking SMS would get a dead-lettered "invitation" that reports
+`sent`), `send_sms` carries a docstring stating the provisioning requirement,
+and the README frames SMS as implemented-but-future.
+

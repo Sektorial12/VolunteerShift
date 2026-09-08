@@ -9,7 +9,7 @@ Autonomous volunteer coordination agent for mid-size nonprofits, built with the 
 VolunteerShift manages the entire volunteer shift lifecycle autonomously:
 
 1. **Scheduling**: Matches volunteers to shifts based on skills, availability, and reliability
-2. **Communication**: Sends personalized email/SMS invitations and reminders (3-touch sequence)
+2. **Communication**: Sends personalized email invitations and reminders (3-touch sequence); SMS tooling is implemented for a future channel
 3. **No-Show Recovery**: Detects no-shows and autonomously finds/contact replacements
 4. **Hour Tracking**: Logs volunteer hours and updates reliability scores
 5. **Reporting**: Generates weekly/monthly coverage and impact reports
@@ -170,11 +170,12 @@ Deploy the bridge with `infra/lambda/deploy-ses-inbound.sh`.
 `send_sms` publishes directly to phone numbers in E.164 format, so no topic is
 required. `SNS_TOPIC_ARN` is read by the config for future fan-out use only.
 
-Note: actual SMS delivery requires AWS SMS provisioning on the account
-(Pinpoint SMS backend / origination for the destination country), which is not
-enabled on the demo account — the verified live channel is email (invitation +
-reminders + one-tap confirm). The SMS tool path is implemented and exercised by
-the Communicator/Recovery agents when a volunteer prefers SMS.
+Note: SMS is a planned future integration. Actual SMS delivery requires AWS
+SMS provisioning on the account (AWS End-User Messaging subscription plus
+origination for the destination country), which the demo account does not
+have — the verified live channel is email (invitation + reminders + one-tap
+confirm). The `send_sms` tool path is implemented and exercised by the
+Communicator/Recovery agents when a volunteer prefers SMS.
 
 ```bash
 aws sns create-topic --name vshift-sms
@@ -353,6 +354,6 @@ PYTHONPATH=src pytest tests/test_integration.py -v
 - **Database**: Amazon DynamoDB (5 tables)
 - **Storage**: Amazon S3 (reports)
 - **Email**: Amazon SES (outbound via verified domain; inbound via receipt rule + Lambda)
-- **SMS**: Amazon SNS (direct-to-number publishing)
+- **SMS**: Amazon SNS direct-to-number publishing (implemented; future integration pending AWS SMS provisioning)
 - **Deployment**: Oracle Cloud VPS (systemd + Caddy HTTPS) at https://volshift.xyz; AgentCore Runtime path in `infra/DEPLOYMENT.md`
 - **License**: MIT

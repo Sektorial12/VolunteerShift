@@ -372,6 +372,10 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
 def send_sms(to: str, message: str) -> dict[str, str]:
     """Send an SMS via AWS SNS.
 
+    Note: requires AWS SMS provisioning on the account (AWS End-User Messaging
+    subscription + origination). The demo account does not have it; SMS is a
+    planned future integration and email is the active channel.
+
     Args:
         to: Recipient phone number (E.164 format, e.g., +15551234567).
         message: SMS message content.

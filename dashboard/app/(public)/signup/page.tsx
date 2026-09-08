@@ -12,7 +12,7 @@ import { Button, Field, inputClass } from "@/components/ui";
 const SKILL_OPTIONS = ["food_handling", "first_aid", "driving"];
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const SLOTS = ["morning", "afternoon", "evening"];
-const CHANNELS = ["email", "sms"];
+const CHANNELS = ["email"];
 
 function toggle(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -169,7 +169,7 @@ export default function SignupPage() {
                     autoComplete="email"
                   />
                 </Field>
-                <Field label="Phone (optional)" hint="Only used if you prefer SMS updates.">
+                <Field label="Phone (optional)" hint="Reserved for future SMS notifications.">
                   <input
                     className={inputClass}
                     value={phone}
