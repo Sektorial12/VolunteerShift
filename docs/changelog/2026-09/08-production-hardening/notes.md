@@ -74,3 +74,8 @@ Verified live after deploying: manual trigger ran the full chain —
 shift filled) -> `send_email` (SES message id, status sent) ->
 `log_communication`, with `invitations_sent` persisted on the shift.
 
+The volunteer then confirmed via the emailed one-tap `/respond` link and the
+assignment flipped to `confirmed` — the complete autonomous loop (signup ->
+schedule -> match -> assign -> invite email delivered to the inbox -> one-tap
+confirm) is verified end to end against the live deployment.
+
