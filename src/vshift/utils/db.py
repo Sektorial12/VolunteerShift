@@ -115,7 +115,8 @@ class DynamoDBClient:
         if gsi:
             kwargs["GlobalSecondaryIndexes"] = gsi
 
-        self._dynamodb.create_table(**kwargs)
+        table = self._dynamodb.create_table(**kwargs)
+        table.wait_until_exists()
         logger.info("Created table %s", table_name)
 
 

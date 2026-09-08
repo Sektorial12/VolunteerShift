@@ -1,6 +1,10 @@
 """Generate and load seed data into DynamoDB.
 
-Run: python -m vshift.utils.seed_data
+Run: python -m vshift.utils.seed_data [--reset]
+
+--reset wipes every item from the five Vshift tables first, then reseeds
+(volunteers fresh, shift dates recomputed from today), so a demo starts from
+a clean state with a future-dated shift lifecycle.
 """
 
 import uuid
@@ -183,6 +187,23 @@ def load_seed_data() -> None:
     print(f"Loaded {len(volunteers)} volunteers and {len(shifts)} shifts into DynamoDB")
 
 
+def clear_tables() -> int:
+    """Delete every item from the five Vshift tables. Returns items removed."""
+    tables = [
+        config.ddb_volunteers_table,
+        config.ddb_shifts_table,
+        config.ddb_communications_table,
+        config.ddb_reports_table,
+        config.ddb_audit_table,
+    ]
+    deleted = 0
+    for name in tables:
+        for item in db.scan(name):
+            db.delete_item(name, {"id": item["id"]})
+            deleted += 1
+    return deleted
+
+
 def create_tables() -> None:
     db.create_table_if_not_exists(
         config.ddb_volunteers_table,
@@ -238,6 +259,23 @@ def create_tables() -> None:
     print("All DynamoDB tables created (or already existed)")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Create tables and load Vshift seed data")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="wipe all five tables before seeding (destructive, not recoverable)",
+    )
+    args = parser.parse_args()
+
     create_tables()
+    if args.reset:
+        deleted = clear_tables()
+        print(f"Cleared {deleted} item(s) from the five tables")
     load_seed_data()
+
+
+if __name__ == "__main__":
+    main()
