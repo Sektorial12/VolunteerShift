@@ -216,8 +216,10 @@ def run_action(action: str, shift_id: str) -> dict[str, Any]:
         agent = create_scheduler_agent()
         prompt = (
             f"Find, match, and assign volunteers for shift {shift_id}. "
-            "Query the shift, find matching volunteers, rank them, and use "
-            "assign_volunteers_to_shift to assign the top candidates."
+            "Call get_shift first to see the shift's date, time and required skills. "
+            "Then call match_volunteers_to_shifts with the shift id to get ranked candidates "
+            "(it handles skills and availability matching - do not filter by day yourself). "
+            "Finally call assign_volunteers_to_shift to assign the top candidates."
         )
     elif action == "invite":
         from vshift.agents.communicator import create_communicator_agent

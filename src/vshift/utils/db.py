@@ -62,7 +62,7 @@ class DynamoDBClient:
 
     def scan(self, table_name: str) -> list[dict[str, Any]]:
         table = self.get_table(table_name)
-        response = table.scan()
+        response = table.scan(ConsistentRead=True)
         return _from_dynamodb(response.get("Items", []))
 
     def update_item(
