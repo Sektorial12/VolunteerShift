@@ -168,8 +168,13 @@ Deploy the bridge with `infra/lambda/deploy-ses-inbound.sh`.
 ### 2b. (Optional) SNS topic for SMS
 
 `send_sms` publishes directly to phone numbers in E.164 format, so no topic is
-required for SMS to work. `SNS_TOPIC_ARN` is read by the config for future
-fan-out use only.
+required. `SNS_TOPIC_ARN` is read by the config for future fan-out use only.
+
+Note: actual SMS delivery requires AWS SMS provisioning on the account
+(Pinpoint SMS backend / origination for the destination country), which is not
+enabled on the demo account — the verified live channel is email (invitation +
+reminders + one-tap confirm). The SMS tool path is implemented and exercised by
+the Communicator/Recovery agents when a volunteer prefers SMS.
 
 ```bash
 aws sns create-topic --name vshift-sms
