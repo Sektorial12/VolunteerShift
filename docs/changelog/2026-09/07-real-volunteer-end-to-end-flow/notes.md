@@ -63,11 +63,6 @@ volunteers, and there was no public signup path.
   re-seed first if you want a clean demo (sandbox SES will reject the @example.org
   recipients).
 
-## Deploy notes
-
-- VPS `.env` needs `PUBLIC_DASHBOARD_URL` set to the volunteer-reachable dashboard URL
-  before restart, or emailed links will point at localhost.
-
 ## Live deployment (2026-09-07, verified)
 
 Deployed to the Oracle VPS via commit `3009717` + rsync (the VPS `~/vshift` is not a
@@ -85,3 +80,26 @@ shifts and behaved exactly as designed:
   when SES rejected it — trust the comms table, not the agent's self-report
 - All SES deliveries to @example.org fail (sandbox + unverified domain), as expected;
   the flow itself is complete, delivery is the external blocker
+
+## Public deployment (2026-09-08, verified)
+
+`volshift.xyz` now serves the dashboard over HTTPS from the VPS:
+
+- DNS A record flipped to the VPS; Caddy (v2.11.4, Cloudsmith apt repo) reverse-proxies
+  the domain to the dashboard service; Let's Encrypt cert auto-issued and auto-renews
+- Two firewall layers had to allow 80/443: host iptables (Oracle image default is
+  policy DROP with per-port allows — rules added and persisted via netfilter-persistent)
+  and the VNIC's NSG (ingress 80/443 added via `oci network nsg rules add`; the user's
+  earlier console change had not landed on either the NSG or the subnet security list)
+- `vshift-dashboard` systemd service runs the Next.js build on 127.0.0.1:3000 with
+  `API_URL=http://localhost:8000` (runtime config via the /api route handler)
+- VPS tree had stale pre-route-group `app/` pages shadowing the build — fixed by
+  rsyncing with `--delete` (VPS-unique files `.env`/`.venv`/`node_modules` excluded)
+- `PUBLIC_DASHBOARD_URL=https://volshift.xyz` set in the VPS `.env`; backend restarted
+- Verified through the domain: landing 200, `/signup` 200, `/respond` 200,
+  `/api/shifts/s001` + `/api/volunteers/v001` data path, `respond_link()` emits the
+  https URL
+
+Remaining for real email delivery: SES production access (console request, still
+pending as of this note). The entire dashboard (including admin pages) is now public
+on the domain — add auth or accept the exposure for the demo.
