@@ -178,3 +178,89 @@ def test_idempotent_flags_prevent_duplicate_reminders():
     actions = due_actions(shift, now)
     assert "remind_48h" not in actions
     assert "remind_2h" not in actions
+
+
+def test_filled_shift_goes_in_progress_after_start():
+    from vshift.automation import advance_lifecycle_status
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        start_time=_dt(timedelta(minutes=-10)),
+        end_time=_dt(timedelta(hours=3)),
+        scheduled_at="done",
+        status=ShiftStatus.FILLED,
+    )
+    assert advance_lifecycle_status(shift, now) is True
+    assert shift.status == ShiftStatus.IN_PROGRESS
+
+
+def test_future_filled_shift_stays_unstarted():
+    from vshift.automation import advance_lifecycle_status
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        start_time=_dt(timedelta(hours=10)),
+        end_time=_dt(timedelta(hours=14)),
+        scheduled_at="done",
+        status=ShiftStatus.FILLED,
+    )
+    assert advance_lifecycle_status(shift, now) is False
+    assert shift.status == ShiftStatus.FILLED
+
+
+def test_open_unstaffed_shift_not_flipped():
+    from vshift.automation import advance_lifecycle_status
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    shift = _shift(
+        start_time=_dt(timedelta(minutes=-10)),
+        end_time=_dt(timedelta(hours=3)),
+        status=ShiftStatus.OPEN,
+    )
+    assert advance_lifecycle_status(shift, now) is False
+    assert shift.status == ShiftStatus.OPEN
+
+
+def test_cancelled_and_in_progress_shifts_not_flipped():
+    from vshift.automation import advance_lifecycle_status
+
+    now = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    for status in (ShiftStatus.CANCELLED, ShiftStatus.IN_PROGRESS, ShiftStatus.COMPLETED):
+        shift = _shift(
+            start_time=_dt(timedelta(minutes=-10)),
+            end_time=_dt(timedelta(hours=3)),
+            status=status,
+        )
+        assert advance_lifecycle_status(shift, now) is False
+        assert shift.status == status
+
+
+def test_mark_track_done_completes_shift(monkeypatch):
+    from vshift import automation
+
+    stored = {
+        "s-test": _shift(
+            start_time=_dt(timedelta(hours=-5)),
+            end_time=_dt(timedelta(minutes=-1)),
+            scheduled_at="done",
+            reminder_48h_sent=True,
+            reminder_2h_sent=True,
+            no_show_checked=True,
+            hours_tracked=False,
+            status=ShiftStatus.IN_PROGRESS,
+        ).to_dict()
+    }
+
+    class FakeDB:
+        def get_item(self, table, key):
+            return stored.get(key["id"])
+
+        def put_item(self, table, item):
+            stored[item["id"]] = item
+
+    monkeypatch.setattr(automation, "db", FakeDB())
+
+    automation.mark_action_done("s-test", "track")
+    updated = Shift.from_dict(stored["s-test"])
+    assert updated.hours_tracked is True
+    assert updated.status == ShiftStatus.COMPLETED

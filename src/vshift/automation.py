@@ -174,6 +174,22 @@ def due_actions(shift: Shift, now: datetime | None = None) -> list[str]:
     return actions
 
 
+def advance_lifecycle_status(shift: Shift, now: datetime | None = None) -> bool:
+    """Flip a staffed shift to IN_PROGRESS once its start time passes.
+
+    Returns True when the status changed (the caller should persist the shift).
+    COMPLETED is set by ``mark_action_done`` when tracking finishes. An open
+    unstaffed shift is left alone so late scheduling still works.
+    """
+    now = now or clock()
+    if shift.status in (ShiftStatus.PARTIALLY_FILLED, ShiftStatus.FILLED):
+        start = _parse_dt(shift.start_time)
+        if start and now >= start:
+            shift.status = ShiftStatus.IN_PROGRESS
+            return True
+    return False
+
+
 def invitations_pending(shift_id: str) -> bool:
     """True when the shift has invited-but-uncontacted volunteers (invite due)."""
     data = db.get_item(config.ddb_shifts_table, {"id": shift_id})
@@ -197,6 +213,10 @@ def mark_action_done(shift_id: str, action: str) -> None:
         shift.scheduled_at = datetime.now(timezone.utc).isoformat()
     else:
         setattr(shift, field, True)
+
+    # Tracking is the last lifecycle action: hours are logged, the shift is over.
+    if action == "track" and shift.status != ShiftStatus.CANCELLED:
+        shift.status = ShiftStatus.COMPLETED
 
     db.put_item(config.ddb_shifts_table, shift.to_dict())
 
@@ -308,6 +328,8 @@ def run_due_cycle(now: datetime | None = None) -> list[dict[str, Any]]:
 
     for item in shifts_data:
         shift = Shift.from_dict(item)
+        if advance_lifecycle_status(shift, now):
+            db.put_item(config.ddb_shifts_table, shift.to_dict())
         while True:
             pending = due_actions(shift, now)
             if not pending:
