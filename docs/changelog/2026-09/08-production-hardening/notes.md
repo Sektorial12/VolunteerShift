@@ -105,5 +105,8 @@ Fixed in `automation.py`: the worker cycle flips staffed shifts
 marking the `track` action done closes the shift as `completed` (unless
 cancelled). Unstaffed open shifts are left alone so late scheduling still
 works. Covered by five new unit tests (suite now 32 passing). Deployed to the
-VPS; existing past-dated shifts closed themselves on the next cycle.
+VPS; verified live the next day: the stale past-dated shifts flipped to
+`in_progress` on the worker's first cycle, and (their `hours_tracked` flags
+predating the fix) a one-time manual `track` trigger closed all of them to
+`completed`, leaving only genuinely future shifts in the active list.
 
