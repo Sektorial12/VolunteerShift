@@ -239,6 +239,7 @@ cd dashboard
 npm run dev          # http://localhost:3000
 npm run build        # must pass before shipping
 API_URL=http://localhost:8000 npm start    # production build; on the VPS the dashboard runs under systemd with this same value, behind Caddy
+API_URL=https://volshift.xyz npm start     # or from your own machine, against the live API
 ```
 
 Routes:

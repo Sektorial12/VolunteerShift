@@ -2,7 +2,8 @@
 
 Next.js 15 (App Router) + React 19 + Tailwind. This is the coordinator-facing app,
 the public landing page, and the volunteer response page. It is a separate service
-from the FastAPI backend and talks to it over HTTP.
+from the FastAPI backend. In production both run on the same VPS behind Caddy,
+which serves the public site at `https://volshift.xyz`.
 
 ## Quick start
 
@@ -16,7 +17,8 @@ Production build (the gate before every push — it type-checks the whole app):
 
 ```bash
 npm run build
-API_URL=http://51.170.132.143:8000 npm start
+API_URL=http://localhost:8000 npm start     # on the VPS: backend is on the same box
+API_URL=https://volshift.xyz npm start      # from your machine, against the live API
 ```
 
 ## How it talks to the backend
@@ -31,8 +33,11 @@ browser ──/api/dashboard──► Next.js route handler ──► $API_URL/a
 
 Three reasons this matters:
 
-1. **Mixed content.** A dashboard served over HTTPS cannot call `http://51.170.132.143:8000`
-   from the browser; Chrome blocks it silently. Server-side forwarding is exempt.
+1. **Transport.** The public site is HTTPS, but the proxy reaches the backend over
+   plain HTTP on loopback (`http://localhost:8000`) — the fast path, and it never
+   leaves the box. A browser is never asked to make a plain-HTTP call from an HTTPS
+   page, which Chrome blocks silently as mixed content. The same holds if `API_URL`
+   points at the raw origin `http://51.170.132.143:8000`, which is still open.
 2. **CORS.** No origin needs to be added to `CORS_ORIGINS` for the dashboard.
    (Keep the env var for other clients; the dashboard no longer needs it.)
 3. **Runtime config.** `API_URL` is read per request, so the backend address can
@@ -40,7 +45,7 @@ Three reasons this matters:
 
 | Env var | Where | Meaning |
 |---|---|---|
-| `API_URL` | server only | Backend base URL the proxy forwards to. **Set this on the host.** |
+| `API_URL` | server only | Backend base URL the proxy forwards to. **Set this on the host.** On the VPS it is `http://localhost:8000`. |
 | `NEXT_PUBLIC_API_URL` | server only | Legacy name from the first handover; still honoured as the proxy target. |
 | `API_KEY` | server only | Optional. Sent upstream as `X-API-Key` if the backend ever requires auth. |
 | `NEXT_PUBLIC_API_DIRECT_URL` | browser | Escape hatch: call the backend directly and skip the proxy. Needs CORS + HTTPS. Normally unset. |
