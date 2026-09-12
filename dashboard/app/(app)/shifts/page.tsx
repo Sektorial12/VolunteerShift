@@ -21,20 +21,23 @@ export default function ShiftsPage() {
 
   const shifts = useMemo(() => {
     const all = [...(data ?? [])].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+    // A closed shift (completed / cancelled) is done regardless of its date.
+    const closed = (s: Shift) => s.status === "completed" || s.status === "cancelled";
+    const isPast = (s: Shift) => closed(s) || shiftPhase(s, now) === "past";
     const needsAttention = (s: Shift) => {
       const c = coverage(s);
-      return shiftPhase(s, now) !== "past" && s.status !== "cancelled" && (c.committed < c.required || c.noShows > 0);
+      return !isPast(s) && (c.committed < c.required || c.noShows > 0);
     };
     const counts = {
       all: all.length,
       attention: all.filter(needsAttention).length,
-      upcoming: all.filter((s) => shiftPhase(s, now) !== "past").length,
-      past: all.filter((s) => shiftPhase(s, now) === "past").length,
+      upcoming: all.filter((s) => !isPast(s)).length,
+      past: all.filter(isPast).length,
     };
     let list = all;
     if (filter === "attention") list = all.filter(needsAttention);
-    else if (filter === "upcoming") list = all.filter((s) => shiftPhase(s, now) !== "past");
-    else if (filter === "past") list = all.filter((s) => shiftPhase(s, now) === "past").reverse();
+    else if (filter === "upcoming") list = all.filter((s) => !isPast(s));
+    else if (filter === "past") list = all.filter(isPast).reverse();
     if (query) list = list.filter((s) => `${s.program_name} ${s.location} ${s.id} ${s.required_skills.join(" ")}`.toLowerCase().includes(query));
     return { list, counts };
   }, [data, filter, query, now]);
