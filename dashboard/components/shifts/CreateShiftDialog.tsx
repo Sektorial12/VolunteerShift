@@ -21,6 +21,16 @@ const SKILL_SUGGESTIONS = [
   "bilingual",
 ];
 
+/**
+ * ISO-8601 with an explicit +00:00 offset and no fractional seconds.
+ * The backend parses these with Python's datetime.fromisoformat, which on
+ * Python 3.10 (the VPS) rejects the trailing "Z" that Date.toISOString emits,
+ * so a "Z" timestamp makes the Scheduler's matcher throw and match nobody.
+ */
+function toBackendIso(d: Date): string {
+  return d.toISOString().replace(/\.\d{3}Z$/, "+00:00");
+}
+
 function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -94,8 +104,8 @@ export function CreateShiftDialog({
       const payload: ShiftCreateInput = {
         program_name: program.trim(),
         location: location.trim(),
-        start_time: new Date(start).toISOString(),
-        end_time: new Date(end).toISOString(),
+        start_time: toBackendIso(new Date(start)),
+        end_time: toBackendIso(new Date(end)),
         required_skills: skills,
         required_volunteers: required,
       };
