@@ -303,8 +303,17 @@ Two supported paths:
 Inbound email bridge (SES -> SNS -> Lambda -> `/api/ingest/email-reply`):
 
 ```bash
-VSHIFT_API_BASE=https://your-host infra/lambda/deploy-ses-inbound.sh
+VSHIFT_API_BASE=https://your-host VSHIFT_API_KEY=<same as API_KEY> infra/lambda/deploy-ses-inbound.sh
 ```
+
+### Security model
+
+The backend requires `X-API-Key` (env `API_KEY`) on every route except the
+public signup, respond, stats, and health endpoints; it binds to localhost and
+is only reachable through the dashboard proxy, which attaches the key
+server-side. One-tap respond links carry an HMAC token
+(`RESPOND_TOKEN_SECRET`). The coordinator console is behind Caddy basic auth.
+See [`docs/changelog/2026-09/13-security-hardening/notes.md`](docs/changelog/2026-09/13-security-hardening/notes.md).
 
 ## API Endpoints
 
@@ -318,7 +327,9 @@ VSHIFT_API_BASE=https://your-host infra/lambda/deploy-ses-inbound.sh
 | POST | `/api/shifts/{id}/checkout` | Volunteer check-out |
 | GET | `/api/volunteers` | List all volunteers |
 | GET | `/api/volunteers/{id}` | Get volunteer details |
-| POST | `/api/volunteers/respond` | Volunteer confirm/decline invitation |
+| GET | `/api/respond/context` | Minimal token-gated view for the respond page (public) |
+| POST | `/api/volunteers/respond` | Volunteer confirm/decline invitation (token-gated, public) |
+| GET | `/api/public/stats` | Sanitized landing-page counters (public) |
 | GET | `/api/communications` | List all communications |
 | GET | `/api/audit` | Agent audit trail (tool call history, newest first) |
 | GET | `/api/reports` | List all reports |
