@@ -312,7 +312,9 @@ The backend requires `X-API-Key` (env `API_KEY`) on every route except the
 public signup, respond, stats, and health endpoints; it binds to localhost and
 is only reachable through the dashboard proxy, which attaches the key
 server-side. One-tap respond links carry an HMAC token
-(`RESPOND_TOKEN_SECRET`). The coordinator console is behind Caddy basic auth.
+(`RESPOND_TOKEN_SECRET`). The coordinator console is public but sanitized:
+volunteer emails/phones are masked, notes are dropped, and respond tokens are
+redacted from every response the dashboard consumes.
 See [`docs/changelog/2026-09/13-security-hardening/notes.md`](docs/changelog/2026-09/13-security-hardening/notes.md).
 
 ## API Endpoints

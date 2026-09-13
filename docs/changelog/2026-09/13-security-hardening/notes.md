@@ -44,6 +44,25 @@ public, one-tap respond links were unsigned and harvestable from
    per IP: 10/min on signup + respond, 120/min general; upstream errors are
    logged server-side and returned generically (no backend URL leak).
 
+## Follow-up (same evening): console public again, responses sanitized
+
+The Caddy basic auth was removed hours after deploy. Reason: Next.js
+prefetches the console routes from the public landing page, and every 401
+with `WWW-Authenticate` triggers the browser's auth dialog — the popup
+appeared on first visit and on link clicks, which fights the demo.
+
+Replacement (sanitize, don't gate):
+
+- `security.py` gains `mask_email` / `mask_phone` / `redact_text` plus
+  `public_volunteer` / `public_communication` / `public_audit` wrappers.
+- `/api/volunteers`, `/api/volunteers/{id}`, `/api/communications`,
+  `/api/audit`, and the dashboard's recent communications now return masked
+  records: emails `j***@example.org`, phones `+1***11`, notes dropped, and
+  `token=...` redacted from every free-text field.
+- The console is public again (no popup); the invisible gates stay: API key
+  on the backend, HMAC tokens on respond links, rate limiting, CSP/HSTS.
+- Reports were already aggregate-only (no PII), so they are unchanged.
+
 ## Deliberate trade-offs
 
 - **Fail-open dev mode**: if `API_KEY` / `RESPOND_TOKEN_SECRET` are unset the

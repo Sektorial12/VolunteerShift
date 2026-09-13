@@ -75,8 +75,32 @@ def secure_env(monkeypatch):
         {
             secure.ddb_shifts_table: [_shift().to_dict()],
             secure.ddb_volunteers_table: [_volunteer().to_dict()],
-            secure.ddb_communications_table: [],
-            secure.ddb_audit_table: [],
+            secure.ddb_communications_table: [
+                {
+                    "id": "c1",
+                    "shift_id": "s1",
+                    "volunteer_id": "v1",
+                    "channel": "email",
+                    "message_type": "invitation",
+                    "content": (
+                        "Hi Jane, confirm at https://volshift.xyz/respond"
+                        "?volunteer_id=v1&shift_id=s1&token=deadbeef1234"
+                        " or email jane@example.org"
+                    ),
+                    "sent_at": "2026-09-13T10:00:00+00:00",
+                }
+            ],
+            secure.ddb_audit_table: [
+                {
+                    "id": "a1",
+                    "timestamp": "2026-09-13T10:00:01+00:00",
+                    "tool_name": "send_email",
+                    "tool_input": (
+                        '{"to": "jane@example.org", "body": "...token=deadbeef1234"}'
+                    ),
+                    "result": '{"status": "sent"}',
+                }
+            ],
         }
     )
     monkeypatch.setattr(api_module, "db", fake)
@@ -154,6 +178,34 @@ def test_respond_applies_with_token(client, secure_env):
     ok = client.post("/api/volunteers/respond", json={**payload, "token": token})
     assert ok.status_code == 200
     assert ok.json()["shift_status"] == "filled"
+
+
+def test_volunteers_masked(client, secure_env):
+    res = client.get("/api/volunteers", headers={"x-api-key": "test-key"})
+    assert res.status_code == 200
+    v = res.json()[0]
+    assert v["name"] == "Jane Doe"
+    assert v["email"] == "j***@example.org"
+    assert v["phone"] == "+1***11"
+    assert v["notes"] == ""
+
+
+def test_communications_redact_tokens(client, secure_env):
+    res = client.get("/api/communications", headers={"x-api-key": "test-key"})
+    assert res.status_code == 200
+    content = res.json()[0]["content"]
+    assert "token=redacted" in content
+    assert "deadbeef1234" not in content
+    assert "j***@example.org" in content
+
+
+def test_audit_redacts_tokens_and_emails(client, secure_env):
+    res = client.get("/api/audit", headers={"x-api-key": "test-key"})
+    assert res.status_code == 200
+    entry = res.json()[0]
+    assert "deadbeef1234" not in entry["tool_input"]
+    assert "jane@example.org" not in entry["tool_input"]
+    assert "j***@example.org" in entry["tool_input"]
 
 
 def test_public_stats_sanitized(client, secure_env):

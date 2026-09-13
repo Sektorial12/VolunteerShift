@@ -18,7 +18,13 @@ from vshift.models.entities import (
     Shift,
     ShiftStatus,
 )
-from vshift.security import api_key_ok, verify_respond_token
+from vshift.security import (
+    api_key_ok,
+    public_audit,
+    public_communication,
+    public_volunteer,
+    verify_respond_token,
+)
 from vshift.utils.db import db
 
 logger = logging.getLogger(__name__)
@@ -157,7 +163,10 @@ class EmailReplyRequest(BaseModel):
 async def get_dashboard() -> dict[str, Any]:
     shifts = db.scan(config.ddb_shifts_table)
     comms = db.scan(config.ddb_communications_table)
-    recent_comms = sorted(comms, key=lambda x: x.get("sent_at", ""), reverse=True)[:20]
+    recent_comms = [
+        public_communication(c)
+        for c in sorted(comms, key=lambda x: x.get("sent_at", ""), reverse=True)[:20]
+    ]
 
     active_shifts = [s for s in shifts if s.get("status") in ("open", "partially_filled", "filled", "in_progress")]
 
@@ -239,7 +248,7 @@ async def check_out(shift_id: str, req: CheckInOut) -> dict[str, Any]:
 
 @app.get("/api/volunteers")
 async def list_volunteers() -> list[dict[str, Any]]:
-    return db.scan(config.ddb_volunteers_table)
+    return [public_volunteer(v) for v in db.scan(config.ddb_volunteers_table)]
 
 
 @app.get("/api/volunteers/{volunteer_id}")
@@ -247,12 +256,12 @@ async def get_volunteer(volunteer_id: str) -> dict[str, Any]:
     item = db.get_item(config.ddb_volunteers_table, {"id": volunteer_id})
     if not item:
         raise HTTPException(status_code=404, detail="Volunteer not found")
-    return item
+    return public_volunteer(item)
 
 
 @app.get("/api/communications")
 async def list_communications() -> list[dict[str, Any]]:
-    return db.scan(config.ddb_communications_table)
+    return [public_communication(c) for c in db.scan(config.ddb_communications_table)]
 
 
 @app.get("/api/audit")
@@ -260,7 +269,7 @@ async def list_audit(sort: str = "desc") -> list[dict[str, Any]]:
     """Return the agent audit trail (tool call history), newest first."""
     items = db.scan(config.ddb_audit_table)
     items.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
-    return items[:200]
+    return [public_audit(a) for a in items[:200]]
 
 
 @app.get("/api/reports")
