@@ -119,6 +119,34 @@ export interface DashboardData {
   total_communications: number;
 }
 
+/** Minimal public view for the one-tap respond page (token-gated). */
+export interface RespondContext {
+  volunteer_name: string;
+  shift: {
+    program_name: string;
+    start_time: string;
+    end_time: string;
+    location: string;
+    required_skills: string[];
+  };
+  assignment_status: AssignmentStatus | string;
+}
+
+/** Sanitized live counters for the public landing page. */
+export interface PublicStats {
+  total_shifts: number;
+  total_communications: number;
+  tool_calls: number;
+  active_shifts: Array<{
+    program_name: string;
+    start_time: string;
+    end_time: string;
+    required_volunteers: number;
+    committed: number;
+  }>;
+  recent_tools: Array<{ id: string; tool_name: string; timestamp: string }>;
+}
+
 export interface AutomationStatus {
   enabled: boolean;
   worker_running: boolean;
@@ -216,11 +244,16 @@ export const api = {
     ),
   volunteers: () => fetchJson<Volunteer[]>("/api/volunteers"),
   volunteer: (id: string) => fetchJson<Volunteer>(`/api/volunteers/${encodeURIComponent(id)}`),
-  respond: (volunteerId: string, shiftId: string, response: "confirm" | "decline") =>
+  respondContext: (volunteerId: string, shiftId: string, token: string) =>
+    fetchJson<RespondContext>(
+      `/api/respond/context?volunteer_id=${encodeURIComponent(volunteerId)}&shift_id=${encodeURIComponent(shiftId)}&token=${encodeURIComponent(token)}`,
+    ),
+  respond: (volunteerId: string, shiftId: string, response: "confirm" | "decline", token: string) =>
     postJson<{ volunteer_id: string; shift_id: string; response: string; shift_status: string }>(
       "/api/volunteers/respond",
-      { volunteer_id: volunteerId, shift_id: shiftId, response },
+      { volunteer_id: volunteerId, shift_id: shiftId, response, token },
     ),
+  publicStats: () => fetchJson<PublicStats>("/api/public/stats"),
   signupVolunteer: (input: VolunteerSignupInput) =>
     postJson<{ status: string; volunteer_id: string; message?: string }>("/api/ingest/volunteer", input),
   communications: () => fetchJson<Communication[]>("/api/communications"),

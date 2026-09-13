@@ -32,6 +32,12 @@ class Config:
     app_port: int = int(os.getenv("APP_PORT", "8000"))
     app_debug: bool = os.getenv("APP_DEBUG", "true").lower() == "true"
 
+    # Shared secret the dashboard proxy sends as X-API-Key. Empty = dev mode
+    # (API open; a startup warning is logged).
+    api_key: str = os.getenv("API_KEY", "")
+    # HMAC secret for one-tap respond links. Empty = unsigned links (dev mode).
+    respond_token_secret: str = os.getenv("RESPOND_TOKEN_SECRET", "")
+
     noshow_threshold_minutes: int = int(os.getenv("NOSHOW_THRESHOLD_MINUTES", "2"))
 
     automation_enabled: bool = os.getenv("AUTOMATION_ENABLED", "true").lower() == "true"

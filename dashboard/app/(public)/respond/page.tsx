@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays, CheckCircle2, Loader2, MapPin, Sparkles, XCircle, Clock } from "lucide-react";
-import { api, type Shift, type Volunteer } from "@/lib/api";
+import { api, type RespondContext } from "@/lib/api";
 import { errMessage } from "@/lib/hooks";
 import { durationHours, fmtShiftWindow, humanize } from "@/lib/format";
 import { Button, Chip } from "@/components/ui";
@@ -25,7 +25,7 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-function gcalLink(shift: Shift): string {
+function gcalLink(shift: RespondContext["shift"]): string {
   const fmt = (iso: string) => new Date(iso).toISOString().replace(/[-:]|\.\d{3}/g, "");
   const params = new URLSearchParams({
     action: "TEMPLATE",
@@ -41,9 +41,9 @@ function RespondInner() {
   const params = useSearchParams();
   const volunteerId = params.get("volunteer_id") ?? "";
   const shiftId = params.get("shift_id") ?? "";
+  const token = params.get("token") ?? "";
 
-  const [shift, setShift] = useState<Shift | null>(null);
-  const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
+  const [ctx, setCtx] = useState<RespondContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [submitting, setSubmitting] = useState<"confirm" | "decline" | null>(null);
@@ -59,10 +59,9 @@ function RespondInner() {
         return;
       }
       try {
-        const [s, v] = await Promise.all([api.shift(shiftId), api.volunteer(volunteerId)]);
+        const c = await api.respondContext(volunteerId, shiftId, token);
         if (!alive) return;
-        setShift(s);
-        setVolunteer(v);
+        setCtx(c);
       } catch {
         if (alive) setLoadError("We could not find this invitation. The link may be invalid or the shift may have been removed.");
       } finally {
@@ -72,16 +71,16 @@ function RespondInner() {
     return () => {
       alive = false;
     };
-  }, [volunteerId, shiftId]);
+  }, [volunteerId, shiftId, token]);
 
-  const assignment = useMemo(() => shift?.assigned_volunteers.find((a) => a.volunteer_id === volunteerId), [shift, volunteerId]);
-  const alreadyAnswered = assignment && ["confirmed", "declined", "checked_in", "checked_out"].includes(assignment.status);
+  const shift = ctx?.shift ?? null;
+  const alreadyAnswered = ctx ? ["confirmed", "declined", "checked_in", "checked_out"].includes(ctx.assignment_status) : false;
 
   const submit = async (choice: "confirm" | "decline") => {
     setSubmitting(choice);
     setSubmitError("");
     try {
-      await api.respond(volunteerId, shiftId, choice);
+      await api.respond(volunteerId, shiftId, choice, token);
       setDone(choice);
     } catch (e) {
       setSubmitError(errMessage(e));
@@ -110,8 +109,8 @@ function RespondInner() {
     );
   }
 
-  const firstName = volunteer?.name?.split(" ")[0] ?? "there";
-  const finalChoice = done ?? (alreadyAnswered ? (assignment!.status === "declined" ? "decline" : "confirm") : null);
+  const firstName = ctx?.volunteer_name?.split(" ")[0] ?? "there";
+  const finalChoice = done ?? (alreadyAnswered ? (ctx!.assignment_status === "declined" ? "decline" : "confirm") : null);
 
   return (
     <Centered>
@@ -210,7 +209,7 @@ function RespondInner() {
                   </Button>
                 </div>
                 <p className="mt-3 text-center text-[11px] text-slate-400">
-                  Responding for <span className="font-medium text-slate-500">{volunteer?.name}</span>. Not you?{" "}
+                  Responding for <span className="font-medium text-slate-500">{ctx?.volunteer_name}</span>. Not you?{" "}
                   <Link href="/" className="underline">
                     Ignore this link.
                   </Link>

@@ -20,12 +20,55 @@ export const maxDuration = 60;
 
 const UPSTREAM_TIMEOUT_MS = 180_000;
 
+// --- Rate limiting -----------------------------------------------------------
+// In-memory sliding window, per client IP. The proxy is the only path to the
+// backend, so this is the choke point for signup/respond abuse and agent-trigger
+// cost abuse. Single Next.js instance -> module state is sufficient.
+const WINDOW_MS = 60_000;
+const GENERAL_LIMIT = 120; // per IP per minute, all proxied calls
+const STRICT_LIMIT = 10; // per IP per minute, public write endpoints
+const STRICT_PATHS = new Set(["ingest/volunteer", "volunteers/respond"]);
+
+const hits = new Map<string, number[]>();
+
+function clientIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  return (forwarded ? forwarded.split(",")[0] : "").trim() || "unknown";
+}
+
+function rateLimited(req: NextRequest, path: string[]): boolean {
+  const strict = STRICT_PATHS.has(path.join("/"));
+  const limit = strict ? STRICT_LIMIT : GENERAL_LIMIT;
+  const key = `${clientIp(req)}:${strict ? "strict" : "general"}`;
+  const now = Date.now();
+  const recent = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
+  if (recent.length >= limit) {
+    hits.set(key, recent);
+    return true;
+  }
+  recent.push(now);
+  hits.set(key, recent);
+  // Keep the map bounded: drop keys with no activity in the current window.
+  if (hits.size > 5000) {
+    hits.forEach((v, k) => {
+      if (v.every((t) => now - t >= WINDOW_MS)) hits.delete(k);
+    });
+  }
+  return false;
+}
+
 function target(): string {
   return (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 }
 
 async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
   const { path } = await ctx.params;
+  if (rateLimited(req, path)) {
+    return Response.json(
+      { detail: "Too many requests — slow down and try again in a minute." },
+      { status: 429, headers: { "cache-control": "no-store", "retry-after": "60" } },
+    );
+  }
   const incoming = new URL(req.url);
   const upstream = `${target()}/api/${path.map(encodeURIComponent).join("/")}${incoming.search}`;
 
@@ -57,11 +100,12 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const timedOut = /timeout|aborted/i.test(message);
+    console.error(`[api proxy] ${req.method} /api/${path.join("/")} -> ${message}`);
     return Response.json(
       {
         detail: timedOut
-          ? `The backend took longer than ${UPSTREAM_TIMEOUT_MS / 1000}s to answer.`
-          : `Backend unreachable at ${target()} (${message}). Set API_URL on the dashboard host.`,
+          ? "The backend took too long to answer. Try again."
+          : "The backend is unreachable right now. Try again shortly.",
       },
       { status: timedOut ? 504 : 502, headers: { "cache-control": "no-store" } },
     );

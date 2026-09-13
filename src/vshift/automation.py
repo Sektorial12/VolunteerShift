@@ -67,8 +67,12 @@ def clock() -> datetime:
 
 def respond_link(volunteer_id: str, shift_id: str) -> str:
     """One-tap confirm/decline URL for a volunteer's assignment on a shift."""
+    from vshift.security import sign_respond_token
+
     base = config.public_dashboard_url.rstrip("/")
-    return f"{base}/respond?volunteer_id={volunteer_id}&shift_id={shift_id}"
+    token = sign_respond_token(volunteer_id, shift_id)
+    suffix = f"&token={token}" if token else ""
+    return f"{base}/respond?volunteer_id={volunteer_id}&shift_id={shift_id}{suffix}"
 
 
 def _communicator_context(shift_id: str, statuses: tuple[AssignmentStatus, ...]) -> str | None:

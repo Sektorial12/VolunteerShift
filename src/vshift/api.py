@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from vshift.config import config
@@ -16,13 +18,45 @@ from vshift.models.entities import (
     Shift,
     ShiftStatus,
 )
+from vshift.security import api_key_ok, verify_respond_token
 from vshift.utils.db import db
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="VolunteerShift API",
     description="Autonomous volunteer coordination agent",
     version="0.2.0",
+    # The schema and interactive docs are not exposed in production; the API is
+    # consumed by the dashboard proxy only.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
+
+# Routes that must stay reachable without the shared API key: the public
+# signup form, the token-gated respond flow, the landing-page counters, and
+# the health probe. Everything else requires X-API-Key.
+_PUBLIC_PATHS = {
+    "/api/ping",
+    "/api/ingest/volunteer",
+    "/api/respond/context",
+    "/api/volunteers/respond",
+    "/api/public/stats",
+}
+
+
+@app.middleware("http")
+async def _require_api_key(request: Request, call_next):
+    """Reject requests that do not carry the shared API key."""
+    if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+    if not api_key_ok(request.headers.get("x-api-key")):
+        return JSONResponse(
+            status_code=401, content={"detail": "Invalid or missing API key"}
+        )
+    return await call_next(request)
+
 
 def _cors_origins() -> list[str]:
     raw = os.getenv(
@@ -46,6 +80,13 @@ async def _start_automation() -> None:
     from vshift.utils.telemetry import setup_telemetry
 
     setup_telemetry()
+
+    if not config.api_key:
+        logger.warning("API_KEY is not set — the API is unauthenticated (dev mode)")
+    if not config.respond_token_secret:
+        logger.warning(
+            "RESPOND_TOKEN_SECRET is not set — respond links are unsigned (dev mode)"
+        )
 
     global _automation_worker
     _automation_worker = AutomationWorker()
@@ -79,6 +120,7 @@ class VolunteerResponse(BaseModel):
     volunteer_id: str
     shift_id: str
     response: str  # "confirm" or "decline"
+    token: str = ""  # HMAC from the emailed respond link
 
 
 class TriggerRequest(BaseModel):
@@ -237,6 +279,9 @@ async def get_report(report_id: str) -> dict[str, Any]:
 @app.post("/api/volunteers/respond")
 async def volunteer_respond(req: VolunteerResponse) -> dict[str, Any]:
     """Volunteer confirms or declines a shift invitation via web form."""
+    if not verify_respond_token(req.volunteer_id, req.shift_id, req.token):
+        raise HTTPException(status_code=403, detail="Invalid or missing respond token")
+
     shift_data = db.get_item(config.ddb_shifts_table, {"id": req.shift_id})
     if not shift_data:
         raise HTTPException(status_code=404, detail="Shift not found")
@@ -269,6 +314,89 @@ async def volunteer_respond(req: VolunteerResponse) -> dict[str, Any]:
             }
 
     raise HTTPException(status_code=404, detail="Volunteer not assigned to this shift")
+
+
+@app.get("/api/respond/context")
+async def respond_context(
+    volunteer_id: str, shift_id: str, token: str = ""
+) -> dict[str, Any]:
+    """Minimal public view for the one-tap respond page.
+
+    Token-gated so the page never exposes the full volunteer record (email,
+    phone, notes) the way ``GET /api/volunteers/{id}`` does.
+    """
+    if not verify_respond_token(volunteer_id, shift_id, token):
+        raise HTTPException(status_code=403, detail="Invalid or missing respond token")
+
+    shift_data = db.get_item(config.ddb_shifts_table, {"id": shift_id})
+    if not shift_data:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    volunteer_data = db.get_item(config.ddb_volunteers_table, {"id": volunteer_id})
+    if not volunteer_data:
+        raise HTTPException(status_code=404, detail="Volunteer not found")
+
+    shift = Shift.from_dict(shift_data)
+    assignment = next(
+        (a for a in shift.assigned_volunteers if a.volunteer_id == volunteer_id), None
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Volunteer not assigned to this shift")
+
+    return {
+        "volunteer_name": volunteer_data.get("name", ""),
+        "shift": {
+            "program_name": shift.program_name,
+            "start_time": shift.start_time,
+            "end_time": shift.end_time,
+            "location": shift.location,
+            "required_skills": shift.required_skills,
+        },
+        "assignment_status": assignment.status.value,
+    }
+
+
+@app.get("/api/public/stats")
+async def public_stats() -> dict[str, Any]:
+    """Sanitized live counters for the public landing page (no PII)."""
+    shifts = db.scan(config.ddb_shifts_table)
+    comms = db.scan(config.ddb_communications_table)
+    audit = db.scan(config.ddb_audit_table)
+    audit.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+    active: list[dict[str, Any]] = []
+    for s in shifts:
+        if s.get("status") not in ("open", "partially_filled", "filled", "in_progress"):
+            continue
+        assigned = s.get("assigned_volunteers", [])
+        committed = sum(
+            1
+            for a in assigned
+            if a.get("status") in ("confirmed", "checked_in", "checked_out")
+        )
+        active.append(
+            {
+                "program_name": s.get("program_name", ""),
+                "start_time": s.get("start_time", ""),
+                "end_time": s.get("end_time", ""),
+                "required_volunteers": s.get("required_volunteers", 1),
+                "committed": committed,
+            }
+        )
+
+    return {
+        "total_shifts": len(shifts),
+        "total_communications": len(comms),
+        "tool_calls": len(audit),
+        "active_shifts": active,
+        "recent_tools": [
+            {
+                "id": a.get("id", ""),
+                "tool_name": a.get("tool_name", ""),
+                "timestamp": a.get("timestamp", ""),
+            }
+            for a in audit[:20]
+        ],
+    }
 
 
 def _wire(agent, required_tools: list[str], resume_prompt: str) -> None:

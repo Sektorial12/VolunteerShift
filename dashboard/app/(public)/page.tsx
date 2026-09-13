@@ -20,9 +20,9 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
-import { api, type AuditEntry, type Shift } from "@/lib/api";
+import { api, type PublicStats } from "@/lib/api";
 import { usePolling, useNow } from "@/lib/hooks";
-import { coverage, fmtRelative, fmtShiftWindow, toolMeta } from "@/lib/format";
+import { fmtRelative, fmtShiftWindow, toolMeta } from "@/lib/format";
 import { cx, TONE_DOT } from "@/components/ui";
 
 const REPO_URL = "https://github.com/Sektorial12/VolunteerShift";
@@ -68,28 +68,27 @@ const AGENTS = [
 const STACK = ["Strands Agents SDK", "Amazon Bedrock AgentCore", "Mistral Large 3", "DynamoDB", "Amazon SES", "Amazon SNS", "S3", "CloudWatch"];
 
 export default function LandingPage() {
-  const dash = usePolling(() => api.dashboard(), 15_000);
-  const audit = usePolling(() => api.audit(), 10_000);
+  const live = usePolling(() => api.publicStats(), 15_000);
   const now = useNow(10_000);
 
   const stats = useMemo(() => {
-    const shifts = dash.data?.active_shifts ?? [];
+    const shifts = live.data?.active_shifts ?? [];
     let seats = 0;
-    for (const s of shifts) seats += Math.min(coverage(s).committed, coverage(s).required);
+    for (const s of shifts) seats += Math.min(s.committed, Math.max(0, Number(s.required_volunteers) || 0));
     return {
-      shifts: dash.data?.total_shifts ?? 0,
-      messages: dash.data?.total_communications ?? 0,
-      toolCalls: audit.data?.length ?? 0,
+      shifts: live.data?.total_shifts ?? 0,
+      messages: live.data?.total_communications ?? 0,
+      toolCalls: live.data?.tool_calls ?? 0,
       seats,
     };
-  }, [dash.data, audit.data]);
+  }, [live.data]);
 
   const nextShift = useMemo(() => {
-    const shifts = (dash.data?.active_shifts ?? []).filter((s) => new Date(s.end_time).getTime() > now);
+    const shifts = (live.data?.active_shifts ?? []).filter((s) => new Date(s.end_time).getTime() > now);
     return shifts.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0] ?? null;
-  }, [dash.data, now]);
+  }, [live.data, now]);
 
-  const online = !dash.error && !!dash.data;
+  const online = !live.error && !!live.data;
 
   // The header floats transparently over the dark hero, then solidifies once the
   // page scrolls so it stays readable over the light sections below.
@@ -190,16 +189,16 @@ export default function LandingPage() {
               </a>
             </div>
             <dl className="mt-12 grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <Stat label="Shifts coordinated" value={stats.shifts} loading={dash.loading} />
-              <Stat label="Messages sent" value={stats.messages} loading={dash.loading} />
-              <Stat label="Tool calls audited" value={stats.toolCalls} loading={audit.loading} suffix={stats.toolCalls >= 200 ? "+" : ""} />
-              <Stat label="Seats confirmed" value={stats.seats} loading={dash.loading} />
+              <Stat label="Shifts coordinated" value={stats.shifts} loading={live.loading} />
+              <Stat label="Messages sent" value={stats.messages} loading={live.loading} />
+              <Stat label="Tool calls audited" value={stats.toolCalls} loading={live.loading} suffix={stats.toolCalls >= 200 ? "+" : ""} />
+              <Stat label="Seats confirmed" value={stats.seats} loading={live.loading} />
             </dl>
           </div>
 
           {/* Live agent console */}
           <div className="animate-fade-up [animation-delay:120ms]">
-            <AgentConsole entries={audit.data ?? []} loading={audit.loading} now={now} nextShift={nextShift} />
+            <AgentConsole entries={live.data?.recent_tools ?? []} loading={live.loading} now={now} nextShift={nextShift} />
           </div>
         </div>
       </section>
@@ -433,8 +432,11 @@ function BigNumber({ value, label }: { value: string; label: string }) {
   );
 }
 
-function AgentConsole({ entries, loading, now, nextShift }: { entries: AuditEntry[]; loading: boolean; now: number; nextShift: Shift | null }) {
+function AgentConsole({ entries, loading, now, nextShift }: { entries: PublicStats["recent_tools"]; loading: boolean; now: number; nextShift: PublicStats["active_shifts"][number] | null }) {
   const rows = entries.slice(0, 7);
+  const committed = nextShift?.committed ?? 0;
+  const required = Math.max(0, Number(nextShift?.required_volunteers) || 0);
+  const pct = required > 0 ? Math.min(100, Math.round((committed / required) * 100)) : 0;
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 shadow-2xl shadow-black/40 backdrop-blur">
       <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2.5">
@@ -481,14 +483,14 @@ function AgentConsole({ entries, loading, now, nextShift }: { entries: AuditEntr
             </div>
             <div className="shrink-0 text-right">
               <p className="text-sm font-semibold text-white tabular">
-                {coverage(nextShift).committed}
-                <span className="text-slate-400">/{coverage(nextShift).required}</span>
+                {committed}
+                <span className="text-slate-400">/{required}</span>
               </p>
               <p className="text-[11px] text-slate-400">confirmed</p>
             </div>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-brand-400 transition-[width] duration-700" style={{ width: `${coverage(nextShift).pct}%` }} />
+            <div className="h-full rounded-full bg-brand-400 transition-[width] duration-700" style={{ width: `${pct}%` }} />
           </div>
         </div>
       )}
