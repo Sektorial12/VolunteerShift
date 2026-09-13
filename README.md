@@ -22,6 +22,8 @@ Volunteer coordinators at mid-size nonprofits ($500K-$10M budget, 50-500 volunte
 
 ## Architecture
 
+![VolunteerShift end-to-end architecture](docs/architecture.png)
+
 ```
  Volunteers (public)                       Coordinator
    |                                          |
