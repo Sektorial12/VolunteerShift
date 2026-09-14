@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Link2, LogIn, LogOut, Users } from "lucide-react";
+import { LogIn, LogOut, Users } from "lucide-react";
 import { api, type Assignment } from "@/lib/api";
 import { errMessage } from "@/lib/hooks";
 import { assignmentStatusMeta, fmtDateTime } from "@/lib/format";
@@ -23,7 +23,6 @@ export function Roster({
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
 
   const checkInOut = async (a: Assignment, kind: "in" | "out") => {
     setBusy(`${a.volunteer_id}:${kind}`);
@@ -39,17 +38,6 @@ export function Roster({
     }
   };
 
-  const copyRespondLink = async (volunteerId: string) => {
-    const url = `${window.location.origin}/respond?volunteer_id=${encodeURIComponent(volunteerId)}&shift_id=${encodeURIComponent(shiftId)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(volunteerId);
-      setTimeout(() => setCopied(null), 1500);
-    } catch {
-      toast.info("Invitation link", url);
-    }
-  };
-
   if (assignments.length === 0) {
     return (
       <EmptyState
@@ -61,19 +49,12 @@ export function Roster({
     );
   }
 
+  // No "copy respond link" action: links are HMAC-signed by the backend and only
+  // ever emailed. Tokens are redacted from every response the console reads.
   const Actions = ({ a }: { a: Assignment }) => {
     const canOut = a.status === "checked_in";
     return (
       <>
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={copied === a.volunteer_id ? Check : Link2}
-          title="Copy this volunteer's one-tap response link"
-          onClick={() => copyRespondLink(a.volunteer_id)}
-        >
-          {copied === a.volunteer_id ? "Copied" : "Link"}
-        </Button>
         {canOut ? (
           <Button size="sm" variant="secondary" icon={LogOut} loading={busy === `${a.volunteer_id}:out`} onClick={() => checkInOut(a, "out")}>
             Check out
