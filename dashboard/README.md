@@ -31,28 +31,33 @@ forwards it to `API_URL`.
 browser ──/api/dashboard──► Next.js route handler ──► $API_URL/api/dashboard
 ```
 
-Three reasons this matters:
+Four reasons this matters:
 
 1. **Transport.** The public site is HTTPS, but the proxy reaches the backend over
    plain HTTP on loopback (`http://localhost:8000`) — the fast path, and it never
-   leaves the box. A browser is never asked to make a plain-HTTP call from an HTTPS
-   page, which Chrome blocks silently as mixed content. The same holds if `API_URL`
-   points at the raw origin `http://51.170.132.143:8000`, which is still open.
+   leaves the box. The backend binds to `127.0.0.1`, so the proxy is the only way in.
+   A browser is never asked to make a plain-HTTP call from an HTTPS page, which
+   Chrome blocks silently as mixed content.
 2. **CORS.** No origin needs to be added to `CORS_ORIGINS` for the dashboard.
    (Keep the env var for other clients; the dashboard no longer needs it.)
 3. **Runtime config.** `API_URL` is read per request, so the backend address can
    change with a restart. It is *not* baked into the JS bundle.
+4. **Choke point.** The proxy attaches `X-API-Key` server-side — the browser never
+   sees it — and rate-limits per client IP: 10 requests a minute on the public write
+   endpoints (`ingest/volunteer`, `volunteers/respond`), 120 a minute on everything
+   else.
 
 | Env var | Where | Meaning |
 |---|---|---|
 | `API_URL` | server only | Backend base URL the proxy forwards to. **Set this on the host.** On the VPS it is `http://localhost:8000`. |
 | `NEXT_PUBLIC_API_URL` | server only | Legacy name from the first handover; still honoured as the proxy target. |
-| `API_KEY` | server only | Optional. Sent upstream as `X-API-Key` if the backend ever requires auth. |
+| `API_KEY` | server only | **Required in production.** Attached upstream as `X-API-Key`; must equal the backend's `API_KEY`. Never sent to the browser. |
 | `NEXT_PUBLIC_API_DIRECT_URL` | browser | Escape hatch: call the backend directly and skip the proxy. Needs CORS + HTTPS. Normally unset. |
 
 The proxy allows 180s upstream, because a `/api/trigger` call runs a large model and
-can take a minute. It returns `502` when the backend is unreachable and `504` on
-timeout, both as `{"detail": "..."}` so the UI shows a real message.
+can take a minute. It returns `502` when the backend is unreachable, `504` on timeout
+and `429` when rate-limited, all as `{"detail": "..."}` with a generic message. The real
+cause is logged server-side, so the backend address never reaches the browser.
 
 ## Routes
 
@@ -60,7 +65,7 @@ timeout, both as `{"detail": "..."}` so the UI shows a real message.
 |---|---|---|
 | `/` | public | Landing page. Live agent console, pipeline walkthrough, stack. |
 | `/signup` | public | Volunteer self-signup form — enters the pool the Scheduler matches against (upserts by email). |
-| `/respond?volunteer_id=..&shift_id=..` | public | One-tap confirm / decline for a volunteer. No admin chrome, no nav. |
+| `/respond?volunteer_id=..&shift_id=..&token=..` | public | One-tap confirm / decline for a volunteer. `token` is an HMAC the backend signs into the emailed link; without it the page shows "Invitation not found". No admin chrome, no nav. |
 | `/dashboard` | app | Overview: needs-a-decision list, coverage, live tool calls. |
 | `/shifts`, `/shifts/[id]` | app | List with filters; detail with roster, check-in/out, agent triggers. |
 | `/volunteers`, `/volunteers/[id]` | app | Pool with skill filters; profile with history and availability. |
@@ -76,7 +81,7 @@ volunteer opening an invitation never sees links to other volunteers' PII.
 ## Layout of the code
 
 ```
-app/(public)/        landing + respond          (no auth chrome)
+app/(public)/        landing + signup + respond (no console chrome)
 app/(app)/           coordinator shell + pages
 app/api/[...path]/   backend proxy (server-side)
 components/ui/       design system: Button, Card, Badge, StatCard, toasts…
@@ -101,12 +106,17 @@ counts assignments that are `confirmed`, `checked_in` or `checked_out` against
 until people actually confirm. If the scheduler is ever changed to hold `open` until
 confirmations arrive, this UI needs no change.
 
-**Invitation emails now carry the `/respond` link.** The backend's `invite`
-automation action sends every matched volunteer a personalized email containing
-their exact `/respond?volunteer_id=..&shift_id=..` URL (built from the backend's
-`PUBLIC_DASHBOARD_URL` env), so the confirm loop closes without the coordinator.
-Volunteers can also just reply YES/NO to the email once SES inbound is live.
-The roster **Link** button still copies the same URL for manual sharing.
+**Invitation emails carry a signed `/respond` link.** The backend's `invite`
+automation action emails every matched volunteer their own
+`/respond?volunteer_id=..&shift_id=..&token=..` URL, where `token` is
+`HMAC-SHA256(RESPOND_TOKEN_SECRET, volunteer_id:shift_id)`. Tokens are redacted from
+every API response the console reads, so the console cannot copy or mint a working
+link — which is why the roster has no "copy link" button. Volunteers can also reply
+YES / NO to the email; SES inbound applies it.
+
+**The console shows masked PII.** `/api/volunteers`, `/api/communications` and
+`/api/audit` return emails as `j***@example.org`, phones as `+1***11`, no notes, and
+`token=redacted` inside any free text. The raw records stay in DynamoDB.
 
 **Audit `result` is double-encoded.** It is `json.dumps(str(python_dict))`, so it
 arrives as a string containing a Python repr. `auditResultText()` unwraps it to show
@@ -124,22 +134,22 @@ volunteer. `↑` `↓` to move, `↵` to open, `esc` to close.
 
 | Gap | Now |
 |---|---|
-| No `next.config.js`, no security headers | Added: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` |
+| No `next.config.js`, no security headers | Added: CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`; HSTS at the Caddy layer |
 | No API proxy | Added, at `app/api/[...path]/route.ts` |
 | `NEXT_PUBLIC_API_URL` baked at build time | Fixed — `API_URL` is read at request time |
 | Some pages use `any` | Gone. Every entity is typed in `lib/api.ts` |
 | No error boundaries / skeletons | Added: `error.tsx` per group, `global-error.tsx`, `loading.tsx`, skeletons on every page |
 | `lib/api.ts` types were duplicated per page | All pages import the shared types |
-| **No auth — dashboard fully open** | **Still open.** See below. |
+| No auth — dashboard fully open | Backend API-key gate (the proxy attaches the key), signed respond links, masked PII, per-IP rate limiting. The console itself stays public for judging — see below. |
 
-### Auth is still the open item
+### The console is public on purpose
 
-Anyone who can reach the dashboard can trigger agents and read volunteer PII. Note
-that the proxy means exposing the dashboard also exposes the API through it, so
-putting auth only on the backend is not enough on its own. Cheapest credible options
-before the demo goes public: a Cloudflare Access / Vercel password in front of the
-whole deployment, or basic auth in Next.js middleware plus a shared secret the proxy
-forwards as `API_KEY`. `/respond` must stay public either way.
+A login in front of the coordinator pages was tried (Caddy basic auth) and removed:
+Next.js prefetches console routes from the public landing page, so every `401` popped
+the browser's password dialog. The trade-off taken instead is *sanitize, don't gate*:
+anyone can open the console and run an agent, but they see masked PII, cannot build a
+working respond link, and are rate-limited. A real deployment should put the console
+behind SSO (for example Amazon Cognito) and keep `/`, `/signup` and `/respond` public.
 
 ## Requests for the backend
 
