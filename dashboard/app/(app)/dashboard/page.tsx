@@ -129,7 +129,7 @@ export default function DashboardPage() {
         <StatCard
           label="Messages sent"
           value={dash.data?.total_communications ?? 0}
-          hint="Email + SMS by the Communicator agent"
+          hint="Sent by the Communicator agent"
           icon={Mail}
           tone="violet"
           loading={dash.loading}

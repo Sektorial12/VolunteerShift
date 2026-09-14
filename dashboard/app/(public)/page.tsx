@@ -39,7 +39,7 @@ const AGENTS = [
     name: "Communicator",
     icon: Bell,
     color: "from-violet-500 to-violet-700",
-    blurb: "Runs the 3-touch sequence: invitation, 48-hour reminder, 2-hour reminder. Email or SMS, whichever each person prefers.",
+    blurb: "Runs the 3-touch sequence: invitation, 48-hour reminder, 2-hour reminder. By email today, with SMS wired in for later.",
     tools: ["send_email", "send_sms", "log_communication"],
   },
   {
@@ -157,7 +157,7 @@ export default function LandingPage() {
           <div className="animate-fade-up">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
               <span className={cx("h-1.5 w-1.5 rounded-full", online ? "bg-brand-400 animate-pulse-dot" : "bg-slate-500")} />
-              {online ? "Agents online · Amazon Bedrock AgentCore" : "Connecting to the agent runtime…"}
+              {online ? "Agents online · Strands on Amazon Bedrock" : "Connecting to the agent runtime…"}
             </div>
             <h1 className="mt-6 text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
               Your volunteer coordinator now works{" "}
@@ -230,7 +230,7 @@ export default function LandingPage() {
         <ol className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: Workflow, title: "You post a shift", text: "Program, time, location, skills, headcount. Thirty seconds." },
-            { icon: BrainCircuit, title: "Agents match and invite", text: "Best-fit volunteers get a one-tap invitation by email or SMS." },
+            { icon: BrainCircuit, title: "Agents match and invite", text: "Best-fit volunteers get a personal email with a one-tap confirm link." },
             { icon: ShieldCheck, title: "No-shows get recovered", text: "Fifteen minutes after start, missing people trigger replacement outreach." },
             { icon: FileBarChart, title: "Hours and reports write themselves", text: "Check-in to check-out becomes hours, reliability and a weekly report." },
           ].map((s, i) => (
@@ -253,7 +253,7 @@ export default function LandingPage() {
             <p className="text-sm font-semibold text-brand-600">The agents</p>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight">A small team that never drops a shift.</h2>
             <p className="mt-3 text-slate-600">
-              Built with the Strands Agents SDK as a multi-agent graph and deployed on Amazon Bedrock AgentCore. Mistral Large 3
+              Built with the Strands Agents SDK as a multi-agent graph and packaged for Amazon Bedrock AgentCore. Mistral Large 3
               does the reasoning; the tools do the work.
             </p>
           </div>
@@ -319,9 +319,9 @@ export default function LandingPage() {
             <ul className="mt-6 space-y-3">
               {[
                 { icon: Users, text: "Matches on skills, availability and a reliability score that learns from every shift." },
-                { icon: MessageSquare, text: "Volunteers reply by email, SMS or a one-tap link. No app to install." },
+                { icon: MessageSquare, text: "Volunteers tap a one-tap link or just reply YES or NO. No app to install." },
                 { icon: Activity, text: "Coordinators see a single ‘needs a decision’ list instead of a wall of notifications." },
-                { icon: Mail, text: "Runs on the channels you already have: Amazon SES for email, SNS for SMS." },
+                { icon: Mail, text: "Email runs on Amazon SES in both directions; SMS is wired in for when provisioning lands." },
               ].map((b) => (
                 <li key={b.text} className="flex gap-3 text-sm text-slate-700">
                   <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
